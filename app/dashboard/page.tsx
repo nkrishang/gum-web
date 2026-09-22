@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { DashboardActionsProvider } from "@/components/dashboard/actions";
 import { ApiKeyView } from "@/components/dashboard/api-key-view";
 import { DepositsView } from "@/components/dashboard/deposits/deposits-view";
 import { SectionSkeleton } from "@/components/dashboard/shell";
@@ -15,12 +16,14 @@ export const metadata: Metadata = { title: "Dashboard" };
  */
 export default function DashboardPage() {
   return (
-    <div className="space-y-14">
-      <ApiKeyView />
-      <WebhooksView />
-      <Suspense fallback={<SectionSkeleton height={320} />}>
-        <DepositsView />
-      </Suspense>
-    </div>
+    <DashboardActionsProvider>
+      <div className="space-y-14">
+        <ApiKeyView />
+        <WebhooksView />
+        <Suspense fallback={<SectionSkeleton height={320} />}>
+          <DepositsView />
+        </Suspense>
+      </div>
+    </DashboardActionsProvider>
   );
 }

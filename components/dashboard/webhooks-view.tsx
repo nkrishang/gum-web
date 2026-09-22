@@ -3,6 +3,7 @@
 import * as React from "react";
 import { CheckIcon, EyeIcon, EyeOffIcon } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
+import { useFlowRequest } from "@/components/dashboard/actions";
 import { Problem } from "@/components/dashboard/api-key-view";
 import { SectionHeader, SectionSkeleton } from "@/components/dashboard/shell";
 import { StatusDot } from "@/components/dashboard/status-dot";
@@ -67,6 +68,8 @@ function EndpointRow({
   const [touched, setTouched] = React.useState(false);
   const error = touched ? validateWebhookUrl(value) : null;
   const dirty = value.trim() !== (current ?? "");
+  // "Set up webhooks" in the deposits empty state lands here, on the URL field.
+  useFlowRequest("set-webhook-endpoint", "webhooks", () => setMode("edit"));
 
   return (
     <div>

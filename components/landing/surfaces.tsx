@@ -5,6 +5,7 @@ import { Countdown } from "./countdown";
 import { Stage } from "./stage";
 import { CodeBlock } from "@/components/code-block";
 import { Monad, Usdc } from "./code";
+import { EXAMPLE_ADDRESS, HEADLESS_DEPOSIT_CODE } from "@/lib/snippets";
 
 /**
  * One deposit request, three ways to put it in front of the payer: the
@@ -13,33 +14,10 @@ import { Monad, Usdc } from "./code";
  * id, same address, same clock on all three.
  */
 
-const ADDRESS = "0x9a3F…A0c2";
+const ADDRESS = EXAMPLE_ADDRESS;
 
 /** The three panels share one height, whatever the viewport. */
 const PANEL_HEIGHT = 540;
-
-/** The same request as the curl on the API key page, with native fetch. */
-const HEADLESS_CODE = `const response = await fetch(
-  "https://api.gum.money/v1/deposit",
-  {
-    method: "POST",
-    headers: {
-      Authorization: \`Bearer \${process.env.GUM_API_KEY}\`,
-      "Content-Type": "application/json",
-      "Idempotency-Key": "order_8841",
-    },
-    body: JSON.stringify({
-      chain: "base",
-      token: "USDC",
-      amount: "2500000", // 2.50 USDC, in base units
-      receiver: "0xYourTreasury…",
-      expires_at: "2026-10-01T00:00:00Z",
-    }),
-  },
-);
-
-const deposit: Deposit = await response.json();
-deposit.payment_address; // "${ADDRESS}"`;
 
 export function Surfaces() {
   return (
@@ -55,7 +33,7 @@ export function Surfaces() {
           <CodeBlock
             title="server.ts · your backend"
             lang="js"
-            code={HEADLESS_CODE}
+            code={HEADLESS_DEPOSIT_CODE}
             style={{ height: PANEL_HEIGHT }}
             className="rounded-[18px] [&_pre]:px-5 [&_pre]:py-3.5 [&_pre]:text-[12.5px] [&_pre]:leading-[1.6]"
             footer={

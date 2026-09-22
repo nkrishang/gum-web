@@ -3,6 +3,7 @@
 import * as React from "react";
 import { CheckIcon, EyeIcon, EyeOffIcon } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
+import { useFlowRequest } from "@/components/dashboard/actions";
 import { SectionHeader, SectionSkeleton } from "@/components/dashboard/shell";
 import { StatusDot } from "@/components/dashboard/status-dot";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -52,6 +53,8 @@ function ApiKeyCard({ info }: { info: ApiKeyInfo | null }) {
   const hasKey = info !== null;
   const busy = create.isPending || rotate.isPending;
   const failure = create.error ?? rotate.error;
+  // "Create API key" in the deposits empty state lands here, on the confirm step.
+  useFlowRequest("create-api-key", "api-key", () => setStage("confirm"));
 
   const cancel = () => {
     create.reset();
@@ -76,7 +79,7 @@ function ApiKeyCard({ info }: { info: ApiKeyInfo | null }) {
       : `${known.slice(0, 12)}${"•".repeat(16)}${known.slice(-4)}`
     : hasKey
       ? `${info.prefix}${"•".repeat(16)}`
-      : "No key yet";
+      : "–";
 
   return (
     <div className="overflow-hidden rounded-[10px] border border-border bg-card">
@@ -85,7 +88,7 @@ function ApiKeyCard({ info }: { info: ApiKeyInfo | null }) {
         <span className="text-[12px] font-medium text-muted-foreground">API key</span>
         {/* The value and its controls travel together: a full line on a phone, inline from sm. */}
         <span className="col-span-2 flex min-w-0 items-center gap-1 sm:col-auto">
-          <span className={cn("min-w-0 truncate", hasKey ? "font-mono text-[13.5px]" : "text-[14px] font-medium")}>{display}</span>
+          <span className={cn("min-w-0 truncate", hasKey ? "font-mono text-[13.5px]" : "text-[14px] text-muted-foreground")}>{display}</span>
           {known ? (
             <span className="flex shrink-0 items-center gap-0.5">
               <Button type="button" variant="ghost" size="icon-sm" aria-label={shown ? "Hide key" : "Reveal key"} onClick={() => setShown((v) => !v)}>

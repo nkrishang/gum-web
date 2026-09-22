@@ -4,6 +4,7 @@ import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { InboxIcon, RefreshCwIcon } from "lucide-react";
 import { CodeBlock } from "@/components/code-block";
+import { useDashboardActions } from "@/components/dashboard/actions";
 import { SectionHeader } from "@/components/dashboard/shell";
 import { DepositFilterBar } from "@/components/dashboard/deposits/filter-bar";
 import { DepositsTable } from "@/components/dashboard/deposits/deposits-table";
@@ -14,7 +15,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { describeError, useAccount, useDeposits } from "@/lib/gum/hooks";
 import type { DepositFilters, DepositStatus } from "@/lib/gum/types";
 import { DEPOSIT_STATUSES } from "@/lib/gum/types";
-import { publicApiUrl } from "@/lib/env";
+import { HEADLESS_DEPOSIT_CODE } from "@/lib/snippets";
 
 const FILTER_KEYS = ["status", "chain_id", "token", "reference", "payment_address", "receiver", "created_after", "created_before"] as const;
 export type FilterKey = (typeof FILTER_KEYS)[number];
@@ -129,16 +130,7 @@ export function DepositsView() {
 }
 
 function FirstDeposit({ hasKey }: { hasKey: boolean }) {
-  // Computed once on mount so the snippet does not change on every render.
-  const [expiresAt] = React.useState(() =>
-    new Date(Date.now() + 86_400_000).toISOString().replace(/\.\d{3}Z$/, "Z"),
-  );
-  const snippet = `curl -X POST ${publicApiUrl}/v1/deposit \\
-  -H "Authorization: Bearer gum_sk_…" \\
-  -H "Content-Type: application/json" \\
-  -H "Idempotency-Key: first-deposit" \\
-  -d '{ "chain": "base", "token": "USDC", "amount": "1000000",
-        "receiver": "0xYourAddress…", "expires_at": "${expiresAt}" }'`;
+  const { start } = useDashboardActions();
   return (
     <div className="grid gap-6 rounded-xl border border-border bg-card p-6 lg:grid-cols-[1fr_1.2fr] lg:items-center">
       <div className="min-w-0">
@@ -150,16 +142,27 @@ function FirstDeposit({ hasKey }: { hasKey: boolean }) {
         </p>
         <div className="mt-4 flex gap-2">
           {!hasKey && (
-            <Button variant="brand" size="sm" render={<a href="#api-key" />}>
+            <Button type="button" variant="brand" size="sm" onClick={() => start("create-api-key")}>
               Create API key
             </Button>
           )}
-          <Button variant="outline" size="sm" render={<a href="#webhooks" />}>
+          <Button type="button" variant="outline" size="sm" onClick={() => start("set-webhook-endpoint")}>
             Set up webhooks
           </Button>
         </div>
       </div>
-      <CodeBlock title="POST /v1/deposit" code={snippet} lang="bash" className="min-w-0" />
+      <CodeBlock
+        title="server.ts · your backend"
+        lang="js"
+        code={HEADLESS_DEPOSIT_CODE}
+        className="min-w-0"
+        footer={
+          <span className="flex items-center gap-2 text-brand">
+            <span className="size-2 rounded-full bg-brand" />
+            201 Created
+          </span>
+        }
+      />
     </div>
   );
 }
