@@ -1,0 +1,1 @@
+Gum — Deposits that stick. A checkout paying 250 USDC with Coinbase to a one-time address, landing as +250 in a user's app balance, on the pink gum mark.

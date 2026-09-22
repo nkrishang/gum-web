@@ -1,36 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# gum-web
 
-## Getting Started
+The website and dashboard for [Gum](https://gum.money): a landing page, Privy sign-in, and an admin
+dashboard to manage your API key, register a webhook endpoint, and browse the deposit requests your
+app created through [api.gum.money](https://github.com/nkrishang/gum-server).
 
-First, run the development server:
+## Routes
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+| Route | What |
+|---|---|
+| `/` | Landing page (ported from stablecoin-gateway's web app) |
+| `/login` | Privy sign-in |
+| `/dashboard` | One page: API key, webhooks, deposits |
+| `/api/gum/*` | Same-origin proxy to gum-server |
+
+## Stack
+
+Next.js 16 (App Router, Turbopack) · React 19 · Tailwind CSS v4 · shadcn/ui · Privy · TanStack Query · Vercel
+
+## Run locally
+
+```sh
+pnpm install
+cp .env.example .env.local   # fill in NEXT_PUBLIC_PRIVY_APP_ID
+pnpm dev                     # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+| Variable | Required | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_PRIVY_APP_ID` | yes | Privy app id. Must match `GUM_PRIVY__APP_ID` on gum-server. |
+| `NEXT_PUBLIC_PRIVY_CLIENT_ID` | no | Privy client id, if you created a dedicated web client. |
+| `GUM_API_URL` | no | gum-server base URL. Default `https://api.gum.money`. Server-side only. |
+| `NEXT_PUBLIC_GUM_API_URL` | no | The URL shown in code snippets. |
+| `NEXT_PUBLIC_SITE_URL` | no | Absolute base for Open Graph images. |
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## How it talks to the API
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The browser calls `/api/gum/*` on this app, which forwards an allowlist of routes to gum-server with the
+user's Privy access token in `Authorization: Bearer`. gum-server verifies the token itself. This avoids
+CORS (gum-server sends no CORS headers) and keeps the API base URL out of the client bundle.
 
-## Learn More
+Routes used: `GET/PATCH /v1/account`, `POST /v1/account/api-key`, `POST /v1/account/api-key/rotate`,
+`POST /v1/account/webhook-secret/rotate`, `GET /v1/deposit`, `GET /v1/chains`.
 
-To learn more about Next.js, take a look at the following resources:
+## Deploy
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Import the repo on Vercel, set the environment variables above, deploy. No other configuration is needed.

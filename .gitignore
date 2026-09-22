@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# The env template is meant to be committed; only real env files stay out.
+!.env.example

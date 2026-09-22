@@ -1,26 +1,570 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Fonts live in a non-inline theme block so utilities read `var(--font-*)` at
+ * runtime: the dashboard gets Geist, and `.landing` swaps in Inter and
+ * JetBrains Mono by redefining the same variables.
+ */
+@theme {
+  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-heading: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  /* Gum's four colours: the whole landing page's palette. The grey is the
+     lightest that clears 4.5:1 on the white, for the body copy. */
+  --color-gum-white: #f7f7f5;
+  --color-gum-pink: #ff5ca8;
+  --color-gum-black: #121212;
+  --color-gum-grey: #6f6e6e;
+  /* Brand */
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-ink: var(--ink);
+  --color-ink-foreground: var(--ink-foreground);
+  --color-paper: var(--paper);
+  /* Deposit statuses */
+  --color-status-pending: var(--status-pending);
+  --color-status-partial: var(--status-partial);
+  --color-status-paid: var(--status-paid);
+  --color-status-settled: var(--status-settled);
+  --color-status-failed: var(--status-failed);
+  --color-status-expired: var(--status-expired);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/*
+  Brand palette
+  ink   #121212  black
+  paper #F7F7F5  page background
+  gum   #FF5CA8  pink accent
+  Greys are warm-neutral so they sit naturally on #F7F7F5.
+*/
+:root {
+  --ink: #121212;
+  --ink-foreground: #f7f7f5;
+  --paper: #f7f7f5;
+  --brand: #ff5ca8;
+  --brand-foreground: #121212;
+
+  --background: #f7f7f5;
+  --foreground: #121212;
+  --card: #ffffff;
+  --card-foreground: #121212;
+  --popover: #ffffff;
+  --popover-foreground: #121212;
+  --primary: #121212;
+  --primary-foreground: #f7f7f5;
+  --secondary: #ecece9;
+  --secondary-foreground: #121212;
+  --muted: #efefec;
+  --muted-foreground: #6b6b68;
+  --accent: #f0f0ed;
+  --accent-foreground: #121212;
+  --destructive: #d92d20;
+  --border: #e3e3df;
+  --input: #dcdcd7;
+  --ring: #ff5ca8;
+  --chart-1: #ff5ca8;
+  --chart-2: #121212;
+  --chart-3: #6b6b68;
+  --chart-4: #b8b8b3;
+  --chart-5: #e3e3df;
+  --radius: 0.625rem;
+  --sidebar: #f2f2ef;
+  --sidebar-foreground: #121212;
+  --sidebar-primary: #121212;
+  --sidebar-primary-foreground: #f7f7f5;
+  --sidebar-accent: #e8e8e4;
+  --sidebar-accent-foreground: #121212;
+  --sidebar-border: #e3e3df;
+  --sidebar-ring: #ff5ca8;
+
+  --status-pending: #6b6b68;
+  --status-partial: #b7791f;
+  --status-paid: #2563eb;
+  --status-settled: #15803d;
+  --status-failed: #d92d20;
+  --status-expired: #9a9a95;
+}
+
+.dark {
+  --ink: #121212;
+  --ink-foreground: #f7f7f5;
+  --paper: #121212;
+  --brand: #ff5ca8;
+  --brand-foreground: #121212;
+
+  --background: #121212;
+  --foreground: #f7f7f5;
+  --card: #1a1a1a;
+  --card-foreground: #f7f7f5;
+  --popover: #1a1a1a;
+  --popover-foreground: #f7f7f5;
+  --primary: #f7f7f5;
+  --primary-foreground: #121212;
+  --secondary: #262626;
+  --secondary-foreground: #f7f7f5;
+  --muted: #232323;
+  --muted-foreground: #a3a39f;
+  --accent: #262626;
+  --accent-foreground: #f7f7f5;
+  --destructive: #f04438;
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.14);
+  --ring: #ff5ca8;
+  --chart-1: #ff5ca8;
+  --chart-2: #f7f7f5;
+  --chart-3: #a3a39f;
+  --chart-4: #5c5c58;
+  --chart-5: #2e2e2e;
+  --sidebar: #161616;
+  --sidebar-foreground: #f7f7f5;
+  --sidebar-primary: #ff5ca8;
+  --sidebar-primary-foreground: #121212;
+  --sidebar-accent: #242424;
+  --sidebar-accent-foreground: #f7f7f5;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #ff5ca8;
+
+  --status-pending: #a3a39f;
+  --status-partial: #f5b544;
+  --status-paid: #60a5fa;
+  --status-settled: #4ade80;
+  --status-failed: #f87171;
+  --status-expired: #737370;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv11";
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--brand) 35%, transparent);
+  }
+  code,
+  kbd,
+  pre {
+    @apply font-mono;
+  }
+  /* Clickable things point: Tailwind v4's preflight gives buttons the arrow. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary {
+    cursor: pointer;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* ------------------------------------------------------------------------
+ * The landing page. Ported from stablecoin-gateway/web/app/globals.css:
+ * Inter for type, JetBrains Mono for code, and the load and scroll reveals.
+ * ---------------------------------------------------------------------- */
+
+@layer base {
+  .landing {
+    --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+    --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+    font-feature-settings: normal;
+  }
+
+  .landing :focus-visible {
+    outline: 2px solid #121212;
+    outline-offset: 2px;
+  }
+
+  /* Selected text on the landing page is gum pink. */
+  .landing ::selection {
+    background-color: #ff5ca8;
+    color: #f7f7f5;
+  }
+
+  /* The page's own ground, so an overscroll bounce is not a white flash. */
+  body:has(.landing) {
+    background-color: #f7f7f5;
+  }
+}
+
+/*
+ * A dialog opened from the landing page is portalled to the body, outside
+ * .landing, so it carries the landing page's type and focus colour itself.
+ * Centring comes from Tailwind's `translate`, which leaves `transform` free
+ * for the entrance.
+ */
+.landing-dialog {
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, monospace;
+  animation: landing-dialog-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.landing-dialog .font-heading {
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+.landing-dialog :focus-visible {
+  outline: 2px solid #121212;
+  outline-offset: 2px;
+}
+
+.landing-dialog ::selection {
+  background-color: #ff5ca8;
+  color: #f7f7f5;
+}
+
+.landing-dialog-scrim {
+  animation: landing-dialog-scrim-in 200ms ease-out both;
+}
+
+@keyframes landing-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes landing-dialog-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.landing-reveal {
+  animation: landing-reveal 480ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.landing-stage-fade-in {
+  animation: landing-stage-fade-in 400ms ease-out both;
+}
+
+/*
+ * The logo grids. Each tile holds a mark twice: as a grey halftone — a dot
+ * screen shown only through the mark's own shape — and in full colour,
+ * hidden. The pointer swaps them, or the scene does (`data-active`): colour
+ * comes in quickly and goes out slowly, the way a light does.
+ */
+.landing-chain {
+  transition: background-color 400ms ease-out;
+}
+
+.landing-chain:hover {
+  background-color: rgb(18 18 18 / 0.04);
+  transition-duration: 180ms;
+}
+
+.landing-chain-halftone,
+.landing-chain-logo {
+  position: absolute;
+  inset: 22%;
+  width: 56%;
+  height: 56%;
+  object-fit: contain;
+}
+
+.landing-chain-halftone {
+  background: radial-gradient(circle, #6f6e6e 0.95px, transparent 1.15px) 0 0 / 2.5px 2.5px;
+  -webkit-mask: var(--logo) center / contain no-repeat;
+  mask: var(--logo) center / contain no-repeat;
+  -webkit-mask-mode: alpha;
+  mask-mode: alpha;
+  opacity: 0.9;
+  transition: opacity 420ms ease-out;
+}
+
+.landing-chain-logo {
+  opacity: 0;
+  transform: scale(0.94);
+  transition:
+    opacity 420ms ease-out,
+    transform 420ms ease-out;
+}
+
+.landing-chain[data-active] {
+  background-color: #ff5ca8;
+  transition-duration: 180ms;
+}
+
+.landing-chain:hover .landing-chain-halftone,
+.landing-chain[data-active] .landing-chain-halftone {
+  opacity: 0;
+  transition-duration: 160ms;
+}
+
+.landing-chain:hover .landing-chain-logo,
+.landing-chain[data-active] .landing-chain-logo {
+  opacity: 1;
+  transform: none;
+  transition-duration: 200ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-chain,
+  .landing-chain-halftone,
+  .landing-chain-logo {
+    transition: none;
+  }
+}
+
+/*
+ * The pay button's provider chip: one at a time, in with a little
+ * overshoot, out in a snap.
+ */
+.landing-pop {
+  animation: landing-pop-in 240ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.landing-pop-out {
+  animation: landing-pop-out 140ms cubic-bezier(0.55, 0, 1, 0.45) both;
+}
+
+@keyframes landing-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes landing-pop-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-pop,
+  .landing-pop-out {
+    animation: none;
+  }
+}
+
+@keyframes landing-stage-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes landing-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing *,
+  .landing *::before,
+  .landing *::after,
+  .landing-dialog,
+  .landing-dialog-scrim {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/*
+ * Scroll reveals. A section is a group: it watches itself and, once enough
+ * of it is on screen, flips `data-in`. Everything inside it carrying
+ * `data-reveal` then arrives, each one `--i` steps after the last. The
+ * stagger is in the delays; the snap is in the curve, an expo-out that
+ * covers most of the distance in its first hundred milliseconds and settles
+ * without a bounce.
+ */
+.landing [data-reveal] {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 480ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 480ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: calc(var(--i, 0) * var(--step, 90ms));
+  will-change: opacity, transform;
+}
+
+.landing [data-reveal="scale"] {
+  transform: translateY(18px) scale(0.975);
+}
+
+/* A pink band wipes in from its left edge, ahead of the words on it. */
+.landing [data-reveal="wipe"] {
+  opacity: 1;
+  transform: none;
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 620ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: calc(var(--i, 0) * var(--step, 90ms));
+  will-change: clip-path;
+}
+
+.landing [data-in="true"] [data-reveal] {
+  opacity: 1;
+  transform: none;
+  clip-path: inset(0 0 0 0);
+}
+
+/*
+ * The mark, filling up. A halftone of the gum mark with a solid copy over
+ * it, clipped away from the bottom; the clip lifts and the mark fills, on
+ * load in the hero and on arrival in the closing.
+ */
+.landing-mark-fill {
+  clip-path: inset(100% 0 0 0);
+}
+
+.landing-mark-fill[data-fill="load"] {
+  animation: landing-fill 1200ms cubic-bezier(0.16, 1, 0.3, 1) 700ms both;
+}
+
+.landing [data-in="true"] .landing-mark-fill[data-fill="reveal"] {
+  animation: landing-fill 1200ms cubic-bezier(0.16, 1, 0.3, 1) 300ms both;
+}
+
+@keyframes landing-fill {
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+/* The last word of the headline lands late and squashes into place. */
+.landing-stick {
+  display: inline-block;
+  transform-origin: bottom left;
+  animation: landing-stick 640ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes landing-stick {
+  from {
+    opacity: 0;
+    transform: translateY(0.35em) scale(1.06, 0.82);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * A pink line down the left rule, as far as the reader has scrolled. A
+ * browser without scroll-driven animations never shows it.
+ */
+.landing-progress {
+  transform: scaleY(0);
+  transform-origin: top;
+}
+
+@supports (animation-timeline: scroll()) {
+  .landing-progress {
+    animation: landing-progress linear both;
+    animation-timeline: scroll(root);
+  }
+}
+
+@keyframes landing-progress {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+/* A packet travelling along a connector, over and over. */
+.landing-packet {
+  animation: landing-packet 1400ms cubic-bezier(0.45, 0, 0.2, 1) infinite;
+}
+
+@keyframes landing-packet {
+  0% {
+    opacity: 0;
+    transform: translateX(0);
+  }
+  12% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(var(--travel));
+  }
 }
