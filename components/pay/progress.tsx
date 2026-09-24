@@ -125,7 +125,7 @@ export function LifecycleView({
           </>,
         ]
       : detectedAt === null
-        ? ["working", "Payment sent", "Waiting for it to arrive."]
+        ? ["working", "Payment sent", null]
         : ["working", "Payment detected", null];
 
   const detect: Checkpoint = {
