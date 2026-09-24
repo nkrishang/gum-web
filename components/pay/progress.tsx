@@ -126,7 +126,7 @@ export function LifecycleView({
         ]
       : detectedAt === null
         ? ["working", "Payment sent", "Waiting for it to arrive."]
-        : ["working", "Payment detected", "Settling it with the recipient."];
+        : ["working", "Payment detected", null];
 
   const detect: Checkpoint = {
     label: "Detect",
@@ -163,7 +163,7 @@ export function LifecycleView({
         <h2 className="mt-4 text-[19px] font-semibold tracking-tight" aria-live="polite">
           {title}
         </h2>
-        <p className="mt-1 max-w-[320px] text-[13.5px] leading-relaxed text-(--pay-muted)">{subtitle}</p>
+        {subtitle ? <p className="mt-1 max-w-[320px] text-[13.5px] leading-relaxed text-(--pay-muted)">{subtitle}</p> : null}
 
         <div className="mt-8 grid w-full grid-cols-2">
           <CheckpointView checkpoint={detect} side="start" />

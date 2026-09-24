@@ -656,6 +656,20 @@
   }
 }
 
+/* Inside a fixed frame nothing may move past its edges, or a scrollbar flashes: fade only. */
+.pay-fade {
+  animation: pay-fade 260ms ease-out both;
+}
+
+@keyframes pay-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .pay-pop {
   animation: pay-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }

@@ -449,7 +449,8 @@ function PayView({
 
       {/* Fixed height; a rare pane taller than this scrolls inside it rather than growing the card. */}
       <div role="tabpanel" id={`pay-panel-${tab}`} aria-labelledby={`pay-tab-${tab}`} className={cn("mt-4 overflow-y-auto", PANE)} key={tab}>
-        <div className="pay-rise">
+        {/* A column the height of the pane, so a pane can grow to fill it. */}
+        <div className="pay-fade flex min-h-full flex-col">
           {model.orphaned ? (
             <Notice tone="warn" icon={<TriangleAlertIcon />} className="mb-3">
               A transfer of{" "}

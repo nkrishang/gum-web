@@ -102,35 +102,32 @@ export function AddressPane({ deposit, asset, remaining }: PaneProps) {
   const exact = viemFormatUnits(remaining, deposit.token_decimals);
   const shown = formatUnits(remaining.toString(), deposit.token_decimals);
 
+  // The card fills the pane: its rows share the height, the address getting the most of it.
   return (
-    <div className="space-y-3">
+    <div className="flex flex-1 flex-col gap-3">
       <NetworkGuard deposit={deposit} asset={asset} />
 
-      <div className="rounded-xl border border-(--pay-line)">
-        <div className="px-3.5 pt-3 pb-3.5">
+      <div className="flex flex-1 flex-col rounded-xl border border-(--pay-line)">
+        <div className="flex min-h-[104px] flex-[1.6] flex-col justify-center gap-2.5 px-3.5 py-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[12px] font-medium tracking-wide text-(--pay-muted) uppercase">Payment address</p>
-            <CopyPill
-              label="Copy address"
-              copied={copied === "address"}
-              onCopy={() => void copy("address", address)}
-            />
+            <CopyPill label="Copy address" copied={copied === "address"} onCopy={() => void copy("address", address)} />
           </div>
           {/* One line wherever it fits (13px mono fits the card from sm up); wraps on phones. */}
-          <p className="mt-2 font-mono text-[13px] leading-relaxed break-all sm:break-normal sm:whitespace-nowrap" translate="no">
+          <p className="font-mono text-[13px] leading-relaxed break-all sm:break-normal sm:whitespace-nowrap" translate="no">
             {address}
           </p>
         </div>
-        <div className="flex items-center justify-between gap-3 border-t border-(--pay-line) px-3.5 py-3">
+        <div className="flex min-h-[76px] flex-1 items-center justify-between gap-3 border-t border-(--pay-line) px-3.5 py-3">
           <div>
             <p className="text-[12px] font-medium tracking-wide text-(--pay-muted) uppercase">Amount</p>
-            <p className="tabular mt-0.5 text-[15px] font-semibold">
-              {shown} <span className="font-medium text-(--pay-muted)">{deposit.token}</span>
+            <p className="tabular mt-1 text-[20px] leading-tight font-semibold tracking-tight">
+              {shown} <span className="text-[15px] font-medium tracking-normal text-(--pay-muted)">{deposit.token}</span>
             </p>
           </div>
           <CopyPill label="Copy amount" copied={copied === "amount"} onCopy={() => void copy("amount", exact)} />
         </div>
-        <div className="flex items-center justify-between gap-3 border-t border-(--pay-line) px-3.5 py-3">
+        <div className="flex min-h-[52px] flex-[0.7] items-center justify-between gap-3 border-t border-(--pay-line) px-3.5 py-3">
           <p className="text-[12px] font-medium tracking-wide text-(--pay-muted) uppercase">Network</p>
           <p className="flex items-center gap-1.5 text-[14px] font-medium">
             <ChainIcon src={chainIcon(asset)} />
