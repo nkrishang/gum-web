@@ -5,27 +5,23 @@ import { CHAINS, LogoGrid } from "./chain-grid";
 import { Countdown } from "./countdown";
 
 /**
- * What a deposit address can be told: who may fund it, how long it lives,
- * where it settles, what it takes. Four cells on the page's rule, each
- * leading with the control rather than a claim about it.
+ * What a deposit address can be told: what it triggers on settlement, how
+ * long it lives, where it settles, what it takes. Four cells on the page's
+ * rule, each leading with the control rather than a claim about it.
  */
 export function Policies() {
   return (
     <div className="grid gap-px border border-gum-grey/30 bg-gum-grey/30 sm:grid-cols-2 xl:grid-cols-4">
       <Cell
         index={0}
-        title="Who can fund it"
-        body="Permissionless, a verified email, or a user signed in to your app."
+        title="What it triggers"
+        body="Run one or more onchain calls when the deposit settles."
       >
-        <ul className="grid gap-1.5 text-[13px]">
-          <Option>Permissionless</Option>
-          <Option>
-            A verified email <span className="font-mono text-gum-grey">jordan@acme.co</span>
-          </Option>
-          <Option selected>
-            A signed-in user <span className="font-mono text-gum-white/80">user_8f21</span>
-          </Option>
-        </ul>
+        <ol className="grid gap-1.5 font-mono text-[12.5px]">
+          <Call index={1} fn="transfer" args="treasury, fee" />
+          <Call index={2} fn="approve" args="vault, rest" />
+          <Call index={3} fn="deposit" args="rest, user" />
+        </ol>
       </Cell>
 
       <Cell
@@ -100,21 +96,22 @@ function Cell({
   );
 }
 
-function Option({ selected, children }: { selected?: boolean; children: ReactNode }) {
+function Call({ index, fn, args }: { index: number; fn: string; args: string }) {
   return (
     <li
       className={cn(
-        "flex items-center gap-2.5 rounded-[8px] border px-3 py-2",
-        selected ? "border-gum-pink bg-gum-pink text-gum-white" : "border-gum-grey/30",
+        "relative flex items-center gap-2.5 rounded-[8px] border border-gum-grey/30 px-3 py-2",
+        index > 1 &&
+          "before:absolute before:-top-[7px] before:left-[19.5px] before:h-1.5 before:w-px before:bg-gum-pink",
       )}
     >
-      <span
-        className={cn(
-          "size-3 shrink-0 rounded-full border-2",
-          selected ? "border-gum-white bg-gum-white" : "border-gum-grey/50",
-        )}
-      />
-      <span className="flex flex-wrap gap-x-1.5">{children}</span>
+      <span className="grid size-4 shrink-0 place-items-center rounded-full bg-gum-pink text-[10px] leading-none text-gum-white">
+        {index}
+      </span>
+      <span className="truncate">
+        {fn}
+        <span className="text-gum-grey">({args})</span>
+      </span>
     </li>
   );
 }
