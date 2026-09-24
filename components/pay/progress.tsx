@@ -7,7 +7,7 @@ import { formatDuration, type PayModel } from "@/lib/pay/model";
 import { explorerTx, type ResolvedAsset } from "@/lib/pay/networks";
 import type { PayDeposit } from "@/lib/pay/types";
 import { cn } from "@/lib/utils";
-import { ExternalLink } from "./bits";
+import { ChainIcon, ExternalLink, INLINE_LINK } from "./bits";
 import type { SentPayment } from "./wallet-pane";
 
 export interface Clock {
@@ -199,7 +199,7 @@ export function StatusGlyph({ tone }: { tone: "working" | "ok" | "warn" | "muted
     );
   }
   const colors = {
-    ok: "bg-(--pay-ok) text-white",
+    ok: "bg-(--pay-ok-soft) text-(--pay-ok)",
     warn: "bg-(--pay-warn-soft) text-(--pay-warn)",
     muted: "bg-(--pay-sunk) text-(--pay-muted)",
   } as const;
@@ -223,6 +223,17 @@ export function StatusGlyph({ tone }: { tone: "working" | "ok" | "warn" | "muted
   );
 }
 
+/** "[logo] Base", inline in a sentence. */
+export function ChainName({ asset }: { asset: ResolvedAsset }) {
+  if (!asset.network) return <>{asset.verified ? "the chain" : asset.chainName}</>;
+  return (
+    <span className="inline-flex items-baseline gap-1 whitespace-nowrap">
+      <ChainIcon src={asset.network.icon} className="size-3.5 self-center" />
+      {asset.network.name}
+    </span>
+  );
+}
+
 /** Between the payer's send and the moment it is settled. */
 export function ProgressView({
   deposit,
@@ -241,15 +252,15 @@ export function ProgressView({
   onPayAgain?: () => void;
 }) {
   const { rows, anchor } = timelineRows({ deposit, model, asset, sent, offset: clock.offset });
-  const chain = asset.network?.name ?? "the chain";
+  const chain = <ChainName asset={asset} />;
   const waitingForDetection = sent !== null && model.firstSeenAt === null;
   const slow = sent !== null && model.firstSeenAt === null && clock.now - sent.at > 45_000;
 
-  const [title, subtitle] = waitingForDetection
-    ? ["Payment sent", `Gum is watching ${chain} for it.`]
+  const [title, subtitle]: [string, React.ReactNode] = waitingForDetection
+    ? ["Payment sent", <>Watching {chain} for it.</>]
     : model.phase === "settling"
       ? ["Payment confirmed", "Paying it through to the recipient."]
-      : ["Payment detected", `Confirming on ${chain}.`];
+      : ["Payment detected", <>Confirming on {chain}.</>];
 
   return (
     <div className="pay-rise">
@@ -274,7 +285,7 @@ export function ProgressView({
         <div className="mt-3 px-1 text-center text-[12.5px] text-(--pay-warn)">
           <p>This is taking longer than usual. Check the transaction in your wallet.</p>
           {onPayAgain ? (
-            <button type="button" onClick={onPayAgain} className="mt-1 font-medium text-(--pay-ink) underline underline-offset-2">
+            <button type="button" onClick={onPayAgain} className={cn("mt-1", INLINE_LINK)}>
               It failed. Let me pay again
             </button>
           ) : null}

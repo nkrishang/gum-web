@@ -2,11 +2,12 @@
 
 import * as React from "react";
 import { formatUnits as viemFormatUnits } from "viem";
-import { InfoIcon, ScanLineIcon, TriangleAlertIcon } from "lucide-react";
+import { ScanLineIcon, TriangleAlertIcon } from "lucide-react";
 import { formatUnits } from "@/lib/format";
 import { eip681, type ResolvedAsset } from "@/lib/pay/networks";
 import type { PayDeposit } from "@/lib/pay/types";
-import { ChainIcon, CopyPill, GroupedAddress, Notice, useCopied } from "./bits";
+import { cn } from "@/lib/utils";
+import { ChainIcon, CopyPill, INLINE_LINK, Notice, useCopied } from "./bits";
 import { QrCode } from "./qr-code";
 
 interface PaneProps {
@@ -85,7 +86,7 @@ export function QrPane({ deposit, asset, remaining }: PaneProps) {
           <button
             type="button"
             onClick={() => setKind(kind === "request" ? "address" : "request")}
-            className="mt-2.5 text-[12.5px] font-medium text-(--pay-muted) underline-offset-2 hover:text-(--pay-ink) hover:underline"
+            className={cn("mt-2.5 text-[12.5px]", INLINE_LINK)}
           >
             {kind === "request" ? "Wallet can't read it? Show a plain address code" : "Show the payment request code"}
           </button>
@@ -97,7 +98,6 @@ export function QrPane({ deposit, asset, remaining }: PaneProps) {
 
 export function AddressPane({ deposit, asset, remaining }: PaneProps) {
   const { copied, copy } = useCopied();
-  const [copiedOnce, setCopiedOnce] = React.useState(false);
   const address = asset.verified ? asset.paymentAddress : deposit.payment_address;
   const exact = viemFormatUnits(remaining, deposit.token_decimals);
   const shown = formatUnits(remaining.toString(), deposit.token_decimals);
@@ -113,13 +113,12 @@ export function AddressPane({ deposit, asset, remaining }: PaneProps) {
             <CopyPill
               label="Copy address"
               copied={copied === "address"}
-              onCopy={() => {
-                void copy("address", address).then((ok) => ok && setCopiedOnce(true));
-              }}
+              onCopy={() => void copy("address", address)}
             />
           </div>
-          <p className="mt-2 text-[15px] leading-relaxed">
-            <GroupedAddress address={address} />
+          {/* One line wherever it fits (13px mono fits the card from sm up); wraps on phones. */}
+          <p className="mt-2 font-mono text-[13px] leading-relaxed break-all sm:break-normal sm:whitespace-nowrap" translate="no">
+            {address}
           </p>
         </div>
         <div className="flex items-center justify-between gap-3 border-t border-(--pay-line) px-3.5 py-3">
@@ -140,20 +139,6 @@ export function AddressPane({ deposit, asset, remaining }: PaneProps) {
           </p>
         </div>
       </div>
-
-      {copiedOnce ? (
-        <Notice tone="brand" icon={<InfoIcon />} className="pay-rise">
-          After pasting, check it starts <strong className="font-mono">{address.slice(0, 6)}</strong> and ends{" "}
-          <strong className="font-mono">{address.slice(-4)}</strong>.
-        </Notice>
-      ) : null}
-      <p className="px-1 text-[12.5px] leading-relaxed text-(--pay-muted)">
-        Sending from an exchange? Withdrawal fees come out of the amount. Make sure{" "}
-        <span className="tabular text-(--pay-ink)">
-          {shown} {deposit.token}
-        </span>{" "}
-        arrives, or you&apos;ll be asked for the rest.
-      </p>
     </div>
   );
 }

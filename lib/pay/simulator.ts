@@ -89,7 +89,6 @@ export const SIM_PAYER = "0x5a0b54d5dc17e0aadc383d2db43b0a0d3e029c4c";
 const EXTERNAL_PAYER = "0x71c7656ec7ab88b098defb751b7401b5f6d8976f";
 
 export class Simulator extends FeedStore implements DepositFeed {
-  readonly endpoint = "/v1/pay/test";
   readonly setup: SimSetup;
   private timers = new Set<ReturnType<typeof setTimeout>>();
   private controlListeners = new Set<() => void>();
@@ -122,15 +121,13 @@ export class Simulator extends FeedStore implements DepositFeed {
     for (const l of this.controlListeners) l();
     if (wasOffline && !this.controls.offline) {
       this.set({ connection: "live" });
-      this.log("info", "connection restored");
       if (this.pending) {
         const next = this.pending;
         this.pending = null;
-        this.accept(next, Date.now(), 0);
+        this.accept(next, 0);
       }
     } else if (!wasOffline && this.controls.offline) {
       this.set({ connection: "reconnecting" });
-      this.log("error", `GET ${this.endpoint}`, "network error (simulated)");
     }
   }
 
@@ -165,11 +162,10 @@ export class Simulator extends FeedStore implements DepositFeed {
     this.clearTimers();
     this.pending = null;
     this.setControls({ scenario, offline: false, queued: 0 });
-    this.set({ log: [], arrivals: {}, notFound: false, connection: "live", clockOffset: 0 });
+    this.set({ notFound: false, connection: "live", clockOffset: 0 });
 
     if (scenario === "not_found") {
       this.set({ deposit: null, notFound: true, connection: "closed" });
-      this.log("request", `GET ${this.endpoint}`, "404 · no such deposit");
       return;
     }
 
@@ -202,9 +198,8 @@ export class Simulator extends FeedStore implements DepositFeed {
       server_time: new Date(now).toISOString(),
       events: [],
     };
-    this.set({ deposit: base, arrivals: {} });
-    this.record("deposit.created", {}, createdAt, true);
-    this.log("request", `GET ${this.endpoint}`, "200 · simulated");
+    this.set({ deposit: base });
+    this.record("deposit.created", {}, createdAt);
 
     const b = this.network.blockTimeMs;
     switch (scenario) {
@@ -228,15 +223,15 @@ export class Simulator extends FeedStore implements DepositFeed {
         this.after(lifetime + 4_500, () => this.expire());
         break;
       case "expired":
-        this.record("deposit.expired", {}, expiresAt + 400, true);
-        this.patch({ status: "expired", timestamps: { ...this.deposit!.timestamps, expired_at: new Date(expiresAt + 400).toISOString() } }, true);
+        this.record("deposit.expired", {}, expiresAt + 400);
+        this.patch({ status: "expired", timestamps: { ...this.deposit!.timestamps, expired_at: new Date(expiresAt + 400).toISOString() } });
         break;
       case "expired_partial": {
         const part = (amount * 25n) / 100n;
         this.detect(part, EXTERNAL_PAYER, createdAt + 90_000, true);
         this.confirmAll(createdAt + 90_000 + b * 2, true);
-        this.record("deposit.expired", {}, expiresAt + 400, true);
-        this.patch({ status: "expired", timestamps: { ...this.deposit!.timestamps, expired_at: new Date(expiresAt + 400).toISOString() } }, true);
+        this.record("deposit.expired", {}, expiresAt + 400);
+        this.patch({ status: "expired", timestamps: { ...this.deposit!.timestamps, expired_at: new Date(expiresAt + 400).toISOString() } });
         break;
       }
       case "settled": {
@@ -244,9 +239,9 @@ export class Simulator extends FeedStore implements DepositFeed {
         this.detect(amount, SIM_PAYER, t, true);
         // Reaching the amount records deposit.ready itself.
         this.confirmAll(t + b * 2, true);
-        this.submit(t + b * 2 + 140, true);
-        this.include(t + b * 3 + 300, true);
-        this.settle(t + b * 4 + 420, true);
+        this.submit(t + b * 2 + 140);
+        this.include(t + b * 3 + 300);
+        this.settle(t + b * 4 + 420);
         break;
       }
     }
@@ -274,8 +269,8 @@ export class Simulator extends FeedStore implements DepositFeed {
       status: "pending",
     };
     const t = at ?? Date.now();
-    this.patch({ status: "partial_paid", timestamps: { ...d.timestamps, detected_at: d.timestamps.detected_at ?? new Date(t).toISOString() } }, silent);
-    this.record("deposit.detected", { transfer, confirmed_amount: d.confirmed_amount }, t, silent);
+    this.patch({ status: "partial_paid", timestamps: { ...d.timestamps, detected_at: d.timestamps.detected_at ?? new Date(t).toISOString() } });
+    this.record("deposit.detected", { transfer, confirmed_amount: d.confirmed_amount }, t);
     if ((opts.autoConfirm ?? this.controls.autopilot) && !silent) {
       const b = this.network.blockTimeMs;
       this.after(Math.max(600, b * 1.2) + jitter(200), () => {
@@ -298,14 +293,14 @@ export class Simulator extends FeedStore implements DepositFeed {
     const transfer = { ...target, status: "confirmed" };
     const total = confirmed.toString();
     if (confirmed >= BigInt(d.amount)) {
-      this.patch({ status: "paid", confirmed_amount: total }, silent);
-      this.record("deposit.payment_confirmed", { transfer, confirmed_amount: total }, t, silent);
-      this.ready(t + 25, silent);
+      this.patch({ status: "paid", confirmed_amount: total });
+      this.record("deposit.payment_confirmed", { transfer, confirmed_amount: total }, t);
+      this.ready(t + 25);
       if (!silent && this.controls.autopilot && this.controls.scenario !== "failed") this.autoSettle();
       else if (!silent && this.controls.scenario === "failed") this.after(120, () => this.submit());
     } else {
-      this.patch({ confirmed_amount: total }, silent);
-      this.record("deposit.payment_confirmed", { transfer, confirmed_amount: total }, t, silent);
+      this.patch({ confirmed_amount: total });
+      this.record("deposit.payment_confirmed", { transfer, confirmed_amount: total }, t);
     }
   }
 
@@ -321,35 +316,35 @@ export class Simulator extends FeedStore implements DepositFeed {
     this.record("deposit.payment_orphaned", { transfer: { ...target, status: "orphaned" }, confirmed_amount: d.confirmed_amount });
   }
 
-  private ready(at?: number, silent = false) {
+  private ready(at?: number) {
     const d = this.deposit;
     if (!d) return;
-    this.record("deposit.ready", { confirmed_amount: d.confirmed_amount }, at, silent);
+    this.record("deposit.ready", { confirmed_amount: d.confirmed_amount }, at);
   }
 
-  submit(at?: number, silent = false) {
+  submit(at?: number) {
     if (this.deposit?.status !== "paid") return;
     if (this.deposit.events.some((e) => e.type === "deposit.settlement_submitted")) return;
-    this.record("deposit.settlement_submitted", {}, at, silent);
+    this.record("deposit.settlement_submitted", {}, at);
   }
 
-  include(at?: number, silent = false) {
+  include(at?: number) {
     const d = this.deposit;
     if (d?.status !== "paid") return;
     const txHash = d.tx_hash ?? hex(32);
     const block = ++this.block;
-    this.patch({ tx_hash: txHash, block_number: block }, silent);
-    this.record("deposit.settlement_included", { tx_hash: txHash, block_number: block }, at, silent);
+    this.patch({ tx_hash: txHash, block_number: block });
+    this.record("deposit.settlement_included", { tx_hash: txHash, block_number: block }, at);
   }
 
-  settle(at?: number, silent = false) {
+  settle(at?: number) {
     const d = this.deposit;
     if (d?.status !== "paid") return;
     const t = at ?? Date.now();
     const txHash = d.tx_hash ?? hex(32);
     const block = d.block_number ?? ++this.block;
-    this.patch({ status: "settled", tx_hash: txHash, block_number: block, timestamps: { ...d.timestamps, settled_at: new Date(t).toISOString() } }, silent);
-    this.record("deposit.settled", { tx_hash: txHash, block_number: block }, t, silent);
+    this.patch({ status: "settled", tx_hash: txHash, block_number: block, timestamps: { ...d.timestamps, settled_at: new Date(t).toISOString() } });
+    this.record("deposit.settled", { tx_hash: txHash, block_number: block }, t);
   }
 
   fail(code = "execution_reverted") {
@@ -438,35 +433,28 @@ export class Simulator extends FeedStore implements DepositFeed {
     this.timers.clear();
   }
 
-  private patch(patch: Partial<PayDeposit>, silent = false) {
+  private patch(patch: Partial<PayDeposit>) {
     const d = this.deposit;
     if (!d) return;
-    this.commit({ ...d, ...patch, timestamps: { ...d.timestamps, ...patch.timestamps, updated_at: new Date().toISOString() } }, silent);
+    this.commit({ ...d, ...patch, timestamps: { ...d.timestamps, ...patch.timestamps, updated_at: new Date().toISOString() } });
   }
 
-  private record(type: string, data: PayEventData, at?: number, silent = false) {
+  private record(type: string, data: PayEventData, at?: number) {
     const d = this.deposit;
     if (!d) return;
     const sequence = d.sequence + 1;
     const event: PayEvent = { id: crypto.randomUUID(), sequence, type, created_at: new Date(at ?? Date.now()).toISOString(), data };
-    this.commit({ ...d, sequence, events: [...d.events, event] }, silent);
+    this.commit({ ...d, sequence, events: [...d.events, event] });
   }
 
   /** Publish a new deposit, as the long-poll would: now, or when the simulated network returns. */
-  private commit(next: PayDeposit, silent: boolean) {
+  private commit(next: PayDeposit) {
     const stamped = { ...next, server_time: new Date().toISOString() };
     if (this.controls.offline) {
       this.pending = stamped;
       return;
     }
-    if (silent) {
-      // History, not news: it was already there when the page opened.
-      const arrivals = { ...this.snapshot.arrivals };
-      for (const e of stamped.events) if (!(e.id in arrivals)) arrivals[e.id] = Number.NaN;
-      this.set({ deposit: stamped, arrivals });
-      return;
-    }
-    this.accept(stamped, Date.now() + 18 + jitter(20), 0);
+    this.accept(stamped, 0);
   }
 }
 

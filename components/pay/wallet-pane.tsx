@@ -2,14 +2,19 @@
 
 import * as React from "react";
 import type { Address, Hex } from "viem";
-import { ArrowRightIcon, CheckIcon, ChevronRightIcon, QrCodeIcon, TriangleAlertIcon, WalletIcon } from "lucide-react";
+import { ArrowRightIcon, CheckIcon, ChevronRightIcon, TriangleAlertIcon, WalletIcon } from "lucide-react";
 import { formatUnits, shortHex } from "@/lib/format";
 import type { ResolvedAsset } from "@/lib/pay/networks";
 import type { PayDeposit } from "@/lib/pay/types";
 import { cn } from "@/lib/utils";
-import { ChainIcon, Notice, Spinner } from "./bits";
+import { ChainIcon, INLINE_LINK, Notice, Spinner } from "./bits";
 import { walletErrorMessage } from "./wallet/errors";
 import type { WalletApi } from "./wallet/types";
+
+/** A few of the wallets behind "Explore wallets", as its icon. */
+const EXPLORE_LOGOS = ["/logos/metamask.svg", "/logos/rainbow.svg", "/logos/trust.svg", "/logos/coinbase.svg"];
+/** The WalletConnect catalogue the modal offers (616 wallets, September 2026), rounded down. */
+const EXPLORE_COUNT = "600+";
 
 const CHAIN_NAMES: Record<number, string> = {
   1: "Ethereum",
@@ -75,10 +80,24 @@ export function WalletPane({
 
   if (!connected) {
     const installed = wallet.options.filter((o) => o.kind === "installed");
-    const phone = wallet.options.filter((o) => o.kind === "walletconnect");
+    const explore = wallet.options.filter((o) => o.kind === "explore");
+    const connectWith = async (id: string) => {
+      setError(null);
+      setConnecting(id);
+      try {
+        await wallet.connect(id);
+      } catch (cause) {
+        setError(walletErrorMessage(cause));
+      } finally {
+        setConnecting(null);
+      }
+    };
+    const row =
+      "group flex h-14 w-full items-center gap-3 rounded-xl border border-(--pay-line) bg-(--pay-card) px-3.5 text-left transition-colors hover:border-(--pay-ink)/25 hover:bg-(--pay-soft) disabled:opacity-60";
+
     return (
       <div className="space-y-2">
-        <p className="px-1 pb-1 text-[13px] text-(--pay-muted)">Connect a wallet to pay in one step.</p>
+        <p className="px-1 pb-1 text-[13px] text-(--pay-muted)">Pay on this page directly.</p>
         {!wallet.optionsReady ? (
           <>
             <div className="h-14 animate-pulse rounded-xl bg-(--pay-soft)" />
@@ -87,56 +106,54 @@ export function WalletPane({
         ) : wallet.options.length === 0 ? (
           <Notice icon={<WalletIcon />}>
             No wallet found in this browser.{" "}
-            <button type="button" onClick={onUseQr} className="font-medium text-(--pay-ink) underline underline-offset-2">
+            <button type="button" onClick={onUseQr} className={INLINE_LINK}>
               Scan the QR code
             </button>{" "}
             with your phone&apos;s wallet instead.
           </Notice>
         ) : null}
-        {[...installed, ...phone].map((option) => {
-          const busy = connecting === option.id || (wallet.status === "connecting" && connecting === option.id);
-          return (
-            <button
-              key={option.id}
-              type="button"
-              disabled={connecting !== null}
-              onClick={async () => {
-                setError(null);
-                setConnecting(option.id);
-                try {
-                  await wallet.connect(option.id);
-                } catch (cause) {
-                  setError(walletErrorMessage(cause));
-                } finally {
-                  setConnecting(null);
-                }
-              }}
-              className="group flex h-14 w-full items-center gap-3 rounded-xl border border-(--pay-line) bg-(--pay-card) px-3.5 text-left transition-colors hover:border-(--pay-ink)/25 hover:bg-(--pay-soft) disabled:opacity-60"
-            >
-              {option.icon ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={option.icon} alt="" width={28} height={28} className="size-7 rounded-lg" />
-              ) : (
-                <span className="flex size-7 items-center justify-center rounded-lg bg-(--pay-sunk)">
-                  <WalletIcon className="size-4" />
-                </span>
-              )}
-              <span className="flex-1 text-[14.5px] font-medium">{option.name}</span>
-              <span className="text-[12px] text-(--pay-faint)">
-                {option.kind === "installed" ? "Detected" : "Phone wallets"}
+        {installed.map((option) => (
+          <button key={option.id} type="button" disabled={connecting !== null} onClick={() => connectWith(option.id)} className={row}>
+            {option.icon ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={option.icon} alt="" width={28} height={28} className="size-7 rounded-lg" />
+            ) : (
+              <span className="flex size-7 items-center justify-center rounded-lg bg-(--pay-sunk)">
+                <WalletIcon className="size-4" />
               </span>
-              {busy ? (
-                <Spinner className="text-(--pay-muted)" />
-              ) : (
-                <ChevronRightIcon className="size-4 text-(--pay-faint) transition-transform group-hover:translate-x-0.5" />
-              )}
-            </button>
-          );
-        })}
-        {installed.length === 0 && wallet.options.length > 0 ? (
+            )}
+            <span className="flex-1 text-[14.5px] font-medium">{option.name}</span>
+            <span className="text-[12px] text-(--pay-faint)">Detected</span>
+            {connecting === option.id ? (
+              <Spinner className="text-(--pay-muted)" />
+            ) : (
+              <ChevronRightIcon className="size-4 text-(--pay-faint) transition-transform group-hover:translate-x-0.5" />
+            )}
+          </button>
+        ))}
+        {explore.map((option) => (
+          <button key={option.id} type="button" disabled={connecting !== null} onClick={() => connectWith(option.id)} className={row}>
+            <span className="grid size-7 grid-cols-2 gap-[2px] rounded-lg bg-(--pay-soft) p-[3px]" aria-hidden>
+              {EXPLORE_LOGOS.map((src) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={src} src={src} alt="" width={11} height={11} className="size-full rounded-[3px] object-contain" />
+              ))}
+            </span>
+            <span className="flex-1 text-[14.5px] font-medium">{option.name}</span>
+            <span className="rounded-full bg-(--pay-soft) px-2 py-0.5 text-[11.5px] font-medium text-(--pay-muted) tabular">
+              {EXPLORE_COUNT}
+            </span>
+            {connecting === option.id ? (
+              <Spinner className="text-(--pay-muted)" />
+            ) : (
+              <ChevronRightIcon className="size-4 text-(--pay-faint) transition-transform group-hover:translate-x-0.5" />
+            )}
+          </button>
+        ))}
+        {wallet.optionsReady && installed.length === 0 && explore.length > 0 ? (
           <p className="px-1 pt-1 text-[12.5px] text-(--pay-muted)">
-            No browser wallet detected.{" "}
-            <button type="button" onClick={onUseQr} className="font-medium text-(--pay-ink) underline-offset-2 hover:underline">
+            No wallet in this browser.{" "}
+            <button type="button" onClick={onUseQr} className={INLINE_LINK}>
               Scan with your phone
             </button>{" "}
             instead.
@@ -277,8 +294,7 @@ export function WalletPane({
         <p className="px-1 text-center text-[12.5px] text-(--pay-muted)">
           This wallet holds {formatUnits((wallet.tokenBalance ?? 0n).toString(), token.decimals)} {token.symbol} on{" "}
           {target.name}.{" "}
-          <button type="button" onClick={onUseQr} className="font-medium text-(--pay-ink) underline-offset-2 hover:underline">
-            <QrCodeIcon className="-mt-0.5 mr-0.5 inline size-3.5" aria-hidden />
+          <button type="button" onClick={onUseQr} className={INLINE_LINK}>
             Pay from another wallet
           </button>
         </p>

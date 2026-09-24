@@ -7,7 +7,7 @@ import { formatDuration, type PayModel } from "@/lib/pay/model";
 import { explorerAddress, explorerTx, type ResolvedAsset } from "@/lib/pay/networks";
 import type { PayDeposit } from "@/lib/pay/types";
 import { ChainIcon, ExternalLink } from "./bits";
-import { StatusGlyph, Timeline, timelineRows, type Clock } from "./progress";
+import { ChainName, StatusGlyph, Timeline, timelineRows, type Clock } from "./progress";
 import type { SentPayment } from "./wallet-pane";
 
 export interface ReturnTo {
@@ -69,7 +69,7 @@ export function SettledView({
         <span className="tabular text-(--pay-ink)">
           {amount} {deposit.token}
         </span>{" "}
-        on {network?.name ?? `chain ${deposit.chain_id}`} reached the recipient.
+        on <ChainName asset={asset} /> reached the recipient.
       </Heading>
 
       {detected !== null && settled !== null ? (

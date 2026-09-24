@@ -592,8 +592,8 @@
     --pay-sunk: #efefeb;
     --pay-brand: #ff5ca8;
     --pay-brand-soft: #ffeaf4;
-    --pay-ok: #13803b;
-    --pay-ok-soft: #e8f6ed;
+    --pay-ok: #3a9d6a;
+    --pay-ok-soft: #e7f5ed;
     --pay-warn: #9a5b00;
     --pay-warn-soft: #fff4e0;
     --pay-danger: #cf2c1f;
@@ -614,8 +614,8 @@
     --pay-soft: #1f1f1f;
     --pay-sunk: #262626;
     --pay-brand-soft: rgb(255 92 168 / 0.14);
-    --pay-ok: #4ade80;
-    --pay-ok-soft: rgb(74 222 128 / 0.12);
+    --pay-ok: #7cc9a0;
+    --pay-ok-soft: rgb(124 201 160 / 0.14);
     --pay-warn: #f5b544;
     --pay-warn-soft: rgb(245 181 68 / 0.12);
     --pay-danger: #f87171;

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import type { Address, Hex } from "viem";
-import { ClockIcon, CopyIcon, FlaskConicalIcon, QrCodeIcon, TriangleAlertIcon, WalletIcon } from "lucide-react";
+import { ClockIcon, CopyIcon, QrCodeIcon, TriangleAlertIcon, WalletIcon } from "lucide-react";
 import { GumMark } from "@/components/brand/logo";
 import { formatUnits } from "@/lib/format";
 import type { DepositFeed } from "@/lib/pay/feed";
@@ -11,8 +11,7 @@ import { resolveAsset, type ResolvedAsset } from "@/lib/pay/networks";
 import type { Simulator } from "@/lib/pay/simulator";
 import type { PayDeposit, PayStatus } from "@/lib/pay/types";
 import { cn } from "@/lib/utils";
-import { ChainIcon, Notice, TokenMark, useNow } from "./bits";
-import { LiveConsole } from "./console";
+import { ChainIcon, Notice, Spinner, TokenMark, useNow } from "./bits";
 import { AddressPane, QrPane } from "./manual";
 import { ExpiredView, FailedView, NotFoundView, SettledView, type ReturnTo } from "./outcomes";
 import { ProgressView, type Clock } from "./progress";
@@ -138,7 +137,7 @@ function PayWidgetInner({
   onStatusChange?: PayWidgetViewProps["onStatusChange"];
 }) {
   const wallet = React.useContext(WalletContext)!;
-  const { deposit, notFound, clockOffset, connection, log } = snapshot;
+  const { deposit, notFound, clockOffset, connection } = snapshot;
   const [sent, setSent] = useSentPayment(deposit?.id, !simulated);
   const [tab, setTab] = React.useState<Tab>("wallet");
   const [walletNotice, setWalletNotice] = React.useState<string | null>(null);
@@ -223,16 +222,15 @@ function PayWidgetInner({
   }
 
   return (
-    <>
-      {simulated ? (
-        <div className="flex items-center gap-2 bg-(--pay-brand) px-5 py-2 text-[12px] font-medium text-[#121212]">
-          <FlaskConicalIcon className="size-3.5" aria-hidden />
-          Test mode. Simulated deposit and wallet; nothing real is sent.
-        </div>
+    <div className="px-5 pt-5 pb-6 sm:px-6">
+      {connection === "reconnecting" ? (
+        <p role="status" className="pay-rise mb-4 flex items-center gap-2 text-[12.5px] text-(--pay-muted)">
+          <Spinner className="size-3.5" />
+          Connection lost. Reconnecting…
+        </p>
       ) : null}
-      <div className="px-5 pt-5 pb-6 sm:px-6">{body}</div>
-      <LiveConsole connection={connection} log={log} simulated={simulated} />
-    </>
+      {body}
+    </div>
   );
 }
 
@@ -277,20 +275,20 @@ function AmountHeader({ deposit, model, asset, clock }: { deposit: PayDeposit; m
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-3">
-        <p className="pt-1 text-[12px] font-medium tracking-[0.12em] text-(--pay-muted) uppercase">
-          {partial ? "Left to pay" : "Pay"}
-        </p>
+      {partial ? (
+        <p className="mb-1.5 text-[12px] font-medium tracking-[0.12em] text-(--pay-muted) uppercase">Left to pay</p>
+      ) : null}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <TokenMark tokenIcon={tokenIcon} size={34} />
+          <p className="tabular text-[34px] leading-none font-semibold tracking-tight">
+            <span key={shown} className={cn(partial && "pay-flash rounded-md")}>
+              {shown}
+            </span>{" "}
+            <span className="text-[17px] font-medium tracking-normal text-(--pay-muted)">{deposit.token}</span>
+          </p>
+        </div>
         <Countdown msLeft={msLeft} />
-      </div>
-      <div className="mt-1.5 flex items-center gap-3">
-        <TokenMark tokenIcon={tokenIcon} chainIcon={asset.network?.icon} size={34} />
-        <p className="tabular text-[34px] leading-none font-semibold tracking-tight">
-          <span key={shown} className={cn(partial && "pay-flash rounded-md")}>
-            {shown}
-          </span>{" "}
-          <span className="text-[17px] font-medium tracking-normal text-(--pay-muted)">{deposit.token}</span>
-        </p>
       </div>
       <p className="mt-2 flex items-center gap-1.5 text-[13px] text-(--pay-muted)">
         on <ChainIcon src={asset.network?.icon} className="size-3.5" />

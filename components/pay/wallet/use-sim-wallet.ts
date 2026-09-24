@@ -8,7 +8,7 @@ import type { WalletApi, WalletOption } from "./types";
 const OPTIONS: WalletOption[] = [
   { id: "sim-metamask", name: "MetaMask", icon: "/logos/metamask.svg", kind: "installed" },
   { id: "sim-rabby", name: "Rabby", icon: "/logos/rabby.svg", kind: "installed" },
-  { id: "sim-walletconnect", name: "WalletConnect", icon: "/logos/walletconnect.svg", kind: "walletconnect" },
+  { id: "sim-explore", name: "Explore wallets", kind: "explore" },
 ];
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));

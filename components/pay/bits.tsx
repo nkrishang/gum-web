@@ -4,6 +4,10 @@ import * as React from "react";
 import { ArrowUpRightIcon, CheckIcon, CopyIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/** Inline text links: underlined at rest so they read as links, darkening on hover. */
+export const INLINE_LINK =
+  "font-medium text-(--pay-muted) underline decoration-(--pay-faint)/70 underline-offset-2 transition-colors hover:text-(--pay-ink) hover:decoration-(--pay-ink)";
+
 /** The clock, ticking while `active`. Client ms. */
 export function useNow(active: boolean, interval = 250): number {
   const [now, setNow] = React.useState(() => Date.now());
@@ -15,38 +19,15 @@ export function useNow(active: boolean, interval = 250): number {
   return now;
 }
 
-/** A token's icon with its network's mark tucked into the corner. */
-export function TokenMark({
-  tokenIcon,
-  chainIcon,
-  size = 28,
-  className,
-}: {
-  tokenIcon: string | null;
-  chainIcon?: string | null;
-  size?: number;
-  className?: string;
-}) {
-  const badge = Math.round(size * 0.5);
+export function TokenMark({ tokenIcon, size = 28, className }: { tokenIcon: string | null; size?: number; className?: string }) {
   return (
-    <span className={cn("relative inline-flex shrink-0", className)} style={{ width: size, height: size }}>
+    <span className={cn("inline-flex shrink-0", className)} style={{ width: size, height: size }}>
       {tokenIcon ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={tokenIcon} alt="" width={size} height={size} className="size-full rounded-full" />
       ) : (
         <span className="size-full rounded-full bg-(--pay-sunk)" />
       )}
-      {chainIcon ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={chainIcon}
-          alt=""
-          width={badge}
-          height={badge}
-          className="absolute -right-1 -bottom-1 rounded-[5px] bg-(--pay-card) ring-2 ring-(--pay-card)"
-          style={{ width: badge, height: badge }}
-        />
-      ) : null}
     </span>
   );
 }
@@ -129,26 +110,6 @@ export function ExternalLink({
       {children}
       <ArrowUpRightIcon className="size-3 opacity-60" aria-hidden />
     </a>
-  );
-}
-
-/** "0x9a3F 5c1E … A0c2": groups of four, the ends in ink, so a pasted address is easy to check. */
-export function GroupedAddress({ address, className }: { address: string; className?: string }) {
-  const body = address.slice(2);
-  const groups = body.match(/.{1,4}/g) ?? [body];
-  return (
-    <span className={cn("font-mono break-all", className)} translate="no">
-      <span className="text-(--pay-ink)">0x</span>
-      {groups.map((g, i) => {
-        const edge = i === 0 || i === groups.length - 1;
-        return (
-          <React.Fragment key={i}>
-            <span className={edge ? "font-semibold text-(--pay-ink)" : "text-(--pay-muted)"}>{g}</span>
-            {i < groups.length - 1 ? <span className="inline-block w-[0.4ch]" /> : null}
-          </React.Fragment>
-        );
-      })}
-    </span>
   );
 }
 

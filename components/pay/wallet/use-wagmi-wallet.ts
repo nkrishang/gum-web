@@ -66,12 +66,11 @@ export function useWagmiWallet(target: { chainId: number; token: Address } | nul
       const key = c.name.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push({
-        id: c.uid,
-        name: c.id === "injected" ? "Browser wallet" : c.name,
-        icon: c.icon ?? (c.type === "walletConnect" ? "/logos/walletconnect.svg" : undefined),
-        kind: c.type === "walletConnect" ? "walletconnect" : "installed",
-      });
+      out.push(
+        c.type === "walletConnect"
+          ? { id: c.uid, name: "Explore wallets", kind: "explore" }
+          : { id: c.uid, name: c.id === "injected" ? "Browser wallet" : c.name, icon: c.icon, kind: "installed" },
+      );
     }
     return out.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "installed" ? -1 : 1));
   }, [connectors]);

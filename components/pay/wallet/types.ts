@@ -10,8 +10,11 @@ export interface WalletOption {
   id: string;
   name: string;
   icon?: string;
-  /** "Installed" extensions first; WalletConnect covers phone wallets. */
-  kind: "installed" | "walletconnect";
+  /**
+   * "installed": an extension that announced itself in this browser. "explore": every other
+   * wallet, phone or desktop, through the WalletConnect modal's catalogue.
+   */
+  kind: "installed" | "explore";
 }
 
 export interface TransferRequest {

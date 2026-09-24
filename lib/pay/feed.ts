@@ -3,19 +3,10 @@ import type { PayDeposit } from "./types";
 
 /**
  * A deposit, kept current. The widget reads everything through this interface, so the same UI
- * runs against the live API (`LiveFeed`) and against the test-mode simulator (`SimulatedFeed`).
+ * runs against the live API (`LiveFeed`) and against the test-mode simulator (`Simulator`).
  */
 
 export type FeedConnection = "connecting" | "live" | "reconnecting" | "closed";
-
-export interface FeedLogEntry {
-  id: number;
-  /** Client clock, ms. */
-  at: number;
-  kind: "request" | "event" | "error" | "info";
-  text: string;
-  detail?: string;
-}
 
 export interface FeedSnapshot {
   deposit: PayDeposit | null;
@@ -23,9 +14,6 @@ export interface FeedSnapshot {
   connection: FeedConnection;
   /** server clock − client clock, ms. Add it to `Date.now()` to read the server's clock. */
   clockOffset: number;
-  /** When each event reached this page, client clock ms, by event id. */
-  arrivals: Record<string, number>;
-  log: FeedLogEntry[];
 }
 
 export interface DepositFeed {
@@ -33,16 +21,11 @@ export interface DepositFeed {
   getSnapshot(): FeedSnapshot;
   start(): void;
   stop(): void;
-  /** Where the requests go, for the developer console. */
-  readonly endpoint: string;
 }
-
-const LOG_LIMIT = 80;
 
 export class FeedStore {
   protected snapshot: FeedSnapshot;
   private listeners = new Set<() => void>();
-  private logId = 0;
 
   constructor(initial: PayDeposit | null) {
     this.snapshot = {
@@ -50,15 +33,7 @@ export class FeedStore {
       notFound: false,
       connection: initial ? "live" : "connecting",
       clockOffset: initial ? offsetFrom(initial, Date.now()) : 0,
-      arrivals: {},
-      log: [],
     };
-    if (initial) {
-      // Events already on the first paint arrived "now"; they are not news.
-      const arrivals: Record<string, number> = {};
-      for (const e of initial.events ?? []) arrivals[e.id] = Number.NaN;
-      this.snapshot.arrivals = arrivals;
-    }
   }
 
   subscribe = (listener: () => void) => {
@@ -75,28 +50,11 @@ export class FeedStore {
     for (const l of this.listeners) l();
   }
 
-  protected log(kind: FeedLogEntry["kind"], text: string, detail?: string) {
-    const entry: FeedLogEntry = { id: ++this.logId, at: Date.now(), kind, text, detail };
-    this.set({ log: [...this.snapshot.log, entry].slice(-LOG_LIMIT) });
-  }
-
-  /** Take a fresh deposit, logging each new event. Returns whether anything changed. */
-  protected accept(next: PayDeposit, receivedAt: number, clockOffset?: number): boolean {
+  /** Take a fresh deposit. Returns whether anything changed. */
+  protected accept(next: PayDeposit, clockOffset?: number): boolean {
     const prev = this.snapshot.deposit;
     const changed = !prev || prev.sequence !== next.sequence || prev.status !== next.status;
-    const arrivals = { ...this.snapshot.arrivals };
-    const fresh = (next.events ?? []).filter((e) => !(e.id in arrivals));
-    for (const e of fresh) arrivals[e.id] = receivedAt;
-    this.set({
-      deposit: next,
-      arrivals,
-      notFound: false,
-      ...(clockOffset !== undefined ? { clockOffset } : {}),
-    });
-    for (const e of fresh) {
-      const lag = receivedAt + this.snapshot.clockOffset - (parseTime(e.created_at) ?? receivedAt);
-      this.log("event", e.type, `seq ${e.sequence} · on screen ${Math.max(0, Math.round(lag))}ms after Gum recorded it`);
-    }
+    this.set({ deposit: next, notFound: false, ...(clockOffset !== undefined ? { clockOffset } : {}) });
     return changed;
   }
 }
@@ -119,7 +77,6 @@ const REQUEST_TIMEOUT_MS = (WAIT_SECS + 10) * 1_000;
  * immediately without a change (no long-poll support), the loop falls back to one request a second.
  */
 export class LiveFeed extends FeedStore implements DepositFeed {
-  readonly endpoint: string;
   private running = false;
   /** Each start() runs its own loop; a stale one (StrictMode's stop-start) sees the bump and ends. */
   private generation = 0;
@@ -134,7 +91,6 @@ export class LiveFeed extends FeedStore implements DepositFeed {
     private base = "/api/pay",
   ) {
     super(initial);
-    this.endpoint = `/v1/pay/${id}`;
   }
 
   start() {
@@ -186,7 +142,6 @@ export class LiveFeed extends FeedStore implements DepositFeed {
         params.set("wait", String(WAIT_SECS));
       }
       const qs = params.toString();
-      const shown = `GET ${this.endpoint}${qs ? `?${qs}` : ""}`;
       const controller = new AbortController();
       this.controller = controller;
       const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -201,7 +156,6 @@ export class LiveFeed extends FeedStore implements DepositFeed {
         const elapsed = performance.now() - t0;
         if (!live()) return;
         if (res.status === 404) {
-          this.log("request", shown, "404 · no such deposit");
           this.set({ notFound: true, connection: "closed" });
           this.running = false;
           return;
@@ -214,12 +168,7 @@ export class LiveFeed extends FeedStore implements DepositFeed {
         else if (elapsed < 2 * this.oneWayMs || this.oneWayMs === 0) this.oneWayMs = elapsed / 2;
         const server = parseTime(next.server_time);
         const offset = server === null ? undefined : server - (receivedAt - this.oneWayMs);
-        const changed = this.accept(next, receivedAt, offset);
-        this.log(
-          "request",
-          shown,
-          `200 · ${changed ? "changed" : "no change"} · ${elapsed >= 1_000 ? `${(elapsed / 1_000).toFixed(1)}s held` : `${Math.round(elapsed)}ms`}`,
-        );
+        const changed = this.accept(next, offset);
         if (this.snapshot.connection !== "live") this.set({ connection: "live" });
         backoff = 0;
         failures = 0;
@@ -232,14 +181,12 @@ export class LiveFeed extends FeedStore implements DepositFeed {
         // A server without long-poll answers at once; do not spin.
         const since = Date.now() - startedAt;
         if (!changed && since < MIN_INTERVAL_MS) await this.sleep(MIN_INTERVAL_MS - since);
-      } catch (error) {
+      } catch {
         if (!live()) return;
         const aborted = controller.signal.aborted;
         failures += 1;
-        if (!aborted || failures > 1) {
-          this.log("error", shown, error instanceof Error ? error.message : "network error");
-          this.set({ connection: "reconnecting" });
-        }
+        // One aborted request is a deliberate retry (tab woke up, came back online), not trouble.
+        if (!aborted || failures > 1) this.set({ connection: "reconnecting" });
         backoff = Math.min(MAX_BACKOFF_MS, backoff ? backoff * 2 : 500);
         await this.sleep(aborted && failures === 1 ? 0 : backoff);
       } finally {
