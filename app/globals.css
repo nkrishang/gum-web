@@ -568,3 +568,189 @@
     transform: translateX(var(--travel));
   }
 }
+
+/* ------------------------------------------------------------------------
+ * The pay widget (/pay/[id]). Self-contained: its own tokens, so an app
+ * embedding it can pick a theme without inheriting the site's, and the
+ * landing page's type (Inter, JetBrains Mono).
+ * ---------------------------------------------------------------------- */
+
+@layer base {
+  .gum-pay {
+    --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+    --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+    font-feature-settings: normal;
+
+    --pay-bg: #f7f7f5;
+    --pay-card: #ffffff;
+    --pay-ink: #121212;
+    --pay-muted: #6f6e6e;
+    --pay-faint: #9a9a95;
+    --pay-line: #e7e7e2;
+    --pay-soft: #f4f4f1;
+    --pay-sunk: #efefeb;
+    --pay-brand: #ff5ca8;
+    --pay-brand-soft: #ffeaf4;
+    --pay-ok: #13803b;
+    --pay-ok-soft: #e8f6ed;
+    --pay-warn: #9a5b00;
+    --pay-warn-soft: #fff4e0;
+    --pay-danger: #cf2c1f;
+    --pay-danger-soft: #fdeceb;
+    --pay-button: #121212;
+    --pay-button-ink: #f7f7f5;
+    --pay-qr: #121212;
+    color: var(--pay-ink);
+  }
+
+  .gum-pay[data-theme="dark"] {
+    --pay-bg: #0e0e0e;
+    --pay-card: #171717;
+    --pay-ink: #f4f4f1;
+    --pay-muted: #a3a39f;
+    --pay-faint: #74746f;
+    --pay-line: rgb(255 255 255 / 0.09);
+    --pay-soft: #1f1f1f;
+    --pay-sunk: #262626;
+    --pay-brand-soft: rgb(255 92 168 / 0.14);
+    --pay-ok: #4ade80;
+    --pay-ok-soft: rgb(74 222 128 / 0.12);
+    --pay-warn: #f5b544;
+    --pay-warn-soft: rgb(245 181 68 / 0.12);
+    --pay-danger: #f87171;
+    --pay-danger-soft: rgb(248 113 113 / 0.12);
+    --pay-button: #f4f4f1;
+    --pay-button-ink: #121212;
+    /* The code stays dark on light: scanners are built for it. */
+    --pay-qr: #121212;
+  }
+
+  .gum-pay :focus-visible {
+    outline: 2px solid var(--pay-brand);
+    outline-offset: 2px;
+  }
+
+  .gum-pay ::selection {
+    background-color: #ff5ca8;
+    color: #f7f7f5;
+  }
+
+  body:has(.gum-pay-page) {
+    background-color: var(--pay-bg, #f7f7f5);
+  }
+}
+
+.pay-rise {
+  animation: pay-rise 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes pay-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.pay-pop {
+  animation: pay-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes pay-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A live step: a ring breathing out of its dot. */
+.pay-ping::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  opacity: 0;
+  animation: pay-ping 1400ms cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes pay-ping {
+  0% {
+    opacity: 0.55;
+    transform: scale(0.6);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+/* The check at the end, drawn rather than shown. */
+.pay-draw {
+  stroke-dasharray: 40;
+  stroke-dashoffset: 40;
+  animation: pay-draw 520ms cubic-bezier(0.65, 0, 0.35, 1) 160ms forwards;
+}
+
+@keyframes pay-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* The spinner around the status mark while Gum works. */
+.pay-orbit {
+  animation: pay-orbit 1100ms linear infinite;
+  transform-origin: center;
+}
+
+@keyframes pay-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* A value that just changed flashes once. */
+.pay-flash {
+  animation: pay-flash 900ms ease-out;
+}
+
+@keyframes pay-flash {
+  from {
+    background-color: var(--pay-brand-soft);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+.pay-urgent {
+  animation: pay-urgent 1000ms ease-in-out infinite;
+}
+
+@keyframes pay-urgent {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gum-pay *,
+  .gum-pay *::before,
+  .gum-pay *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .gum-pay .pay-draw {
+    stroke-dashoffset: 0;
+  }
+}
