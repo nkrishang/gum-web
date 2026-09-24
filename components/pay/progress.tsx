@@ -114,7 +114,7 @@ export function LifecycleView({
   if (payments.length === 0 && sent) payments.push(sent.hash);
 
   const [tone, title, subtitle]: [React.ComponentProps<typeof StatusGlyph>["tone"], string, React.ReactNode] = settled
-    ? ["ok", "Payment complete", "The recipient has been paid."]
+    ? ["ok", "Payment complete", null]
     : failed
       ? [
           "warn",
