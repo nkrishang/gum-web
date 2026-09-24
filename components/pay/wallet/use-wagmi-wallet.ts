@@ -14,12 +14,16 @@ import {
   useWriteContract,
 } from "wagmi";
 import { getConnection, simulateContract, waitForTransactionReceipt } from "wagmi/actions";
-import { popularFill } from "@/lib/pay/wallets";
+import { popularFill, WALLET_ROWS } from "@/lib/pay/wallets";
 import type { TransferRequest, WalletApi, WalletOption } from "./types";
 
 const ZERO: Address = "0x0000000000000000000000000000000000000000";
 
 const noop = () => () => {};
+
+function hasInjectedProvider() {
+  return typeof window !== "undefined" && Boolean((window as { ethereum?: unknown }).ethereum);
+}
 
 /** True after hydration, false on the server and in the hydrating render. */
 function useMounted() {
@@ -68,8 +72,9 @@ export function useWagmiWallet(target: { chainId: number; token: Address } | nul
     const installed: WalletOption[] = [];
     for (const c of connectors) {
       if (c.type === "walletConnect" || c.type === "coinbaseWallet") continue;
-      // The generic injected connector only matters when nothing announced itself.
-      if (c.id === "injected" && discovered.length > 0) continue;
+      // wagmi always carries a generic injected connector. It stands for a real wallet only when
+      // one injected itself without announcing (older extensions, some in-app browsers).
+      if (c.id === "injected" && (discovered.length > 0 || !hasInjectedProvider())) continue;
       const key = c.name.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
@@ -86,18 +91,21 @@ export function useWagmiWallet(target: { chainId: number; token: Address } | nul
       ...discovered.map((c) => ({ name: c.name, rdns: c.id })),
       ...(coinbaseExtension ? [{ name: "Coinbase Wallet", rdns: "com.coinbase.wallet" }] : []),
     ];
+    // Every row already listed takes a slot, so the list never outgrows its frame.
     const popular = popularFill(detected, (w) =>
       w.via === "walletconnect" ? Boolean(walletConnect) : w.via === "coinbase" ? Boolean(coinbase) : true,
-    ).map(
-      (w): WalletOption => ({
-        id: w.via === "coinbase" ? coinbase!.uid : `${w.via}:${w.rdns}`,
-        name: w.name,
-        icon: w.icon,
-        kind: "popular",
-        via: w.via,
-        mobileLink: w.via === "walletconnect" ? w.mobileLink : undefined,
-      }),
-    );
+    )
+      .slice(0, Math.max(0, WALLET_ROWS - installed.length))
+      .map(
+        (w): WalletOption => ({
+          id: w.via === "coinbase" ? coinbase!.uid : `${w.via}:${w.rdns}`,
+          name: w.name,
+          icon: w.icon,
+          kind: "popular",
+          via: w.via,
+          mobileLink: w.via === "walletconnect" ? w.mobileLink : undefined,
+        }),
+      );
     const explore: WalletOption[] = walletConnect ? [{ id: walletConnect.uid, name: "Explore wallets", kind: "explore" }] : [];
     return [...installed, ...popular, ...explore];
   }, [connectors, walletConnect, coinbase]);
