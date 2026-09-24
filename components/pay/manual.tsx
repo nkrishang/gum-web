@@ -44,7 +44,7 @@ export function QrPane({ deposit, asset, remaining }: PaneProps) {
   const [kind, setKind] = React.useState<"request" | "address">(asset.verified ? "request" : "address");
   const value =
     kind === "request" && asset.verified
-      ? eip681({ chainId: asset.network.chain.id, token: asset.token.address, to: asset.paymentAddress, amount: remaining })
+      ? eip681({ chainId: asset.network.chain.id, token: asset.token, to: asset.paymentAddress, amount: remaining })
       : deposit.payment_address;
   const shown = formatUnits(remaining.toString(), deposit.token_decimals);
   const logo = asset.verified ? asset.token.icon : asset.tokenIcon;

@@ -15,6 +15,13 @@ export interface PayToken {
   address: Address;
   decimals: number;
   icon: string;
+  /**
+   * The token is also the chain's native currency (Arc's USDC), which gum-indexer credits too.
+   * A QR payment request then asks for the native currency, at these decimals: every wallet knows
+   * its chain's native currency, while a brand-new chain's token contract may be unknown to it,
+   * and a wallet that can't look up the decimals shows the base-unit amount raw.
+   */
+  native?: { decimals: number };
 }
 
 export interface PayNetwork {
@@ -84,7 +91,13 @@ export const NETWORKS: Record<number, PayNetwork> = {
     explorer: "https://explorer.arc.io",
     blockTimeMs: 500,
     tokens: [
-      { symbol: "USDC", address: "0x3600000000000000000000000000000000000000", decimals: 6, icon: USDC_ICON },
+      {
+        symbol: "USDC",
+        address: "0x3600000000000000000000000000000000000000",
+        decimals: 6,
+        icon: USDC_ICON,
+        native: { decimals: 18 },
+      },
     ],
   },
 };
@@ -127,12 +140,20 @@ export function resolveAsset(deposit: Pick<PayDeposit, "chain_id" | "token" | "t
 }
 
 /**
- * An EIP-681 payment request: `ethereum:<token>@<chainId>/transfer?address=<to>&uint256=<amount>`.
- * A wallet that reads it pre-fills the network, the token, the recipient and the exact amount, so
- * the payer has nothing to choose and nothing to type.
+ * An EIP-681 payment request. A wallet that reads it pre-fills the network, the asset, the
+ * recipient and the exact amount, so the payer has nothing to choose and nothing to type.
+ *
+ * For a token: `ethereum:<token>@<chainId>/transfer?address=<to>&uint256=<amount>`, in the token's
+ * base units. For a token that is also the chain's native currency (see `PayToken.native`):
+ * `ethereum:<to>@<chainId>?value=<amount>`, scaled to the native decimals.
  */
-export function eip681(args: { chainId: number; token: string; to: string; amount: bigint }): string {
-  return `ethereum:${args.token}@${args.chainId}/transfer?address=${args.to}&uint256=${args.amount.toString()}`;
+export function eip681(args: { chainId: number; token: PayToken; to: string; amount: bigint }): string {
+  const { chainId, token, to, amount } = args;
+  if (token.native) {
+    const scale = 10n ** BigInt(token.native.decimals - token.decimals);
+    return `ethereum:${to}@${chainId}?value=${(amount * scale).toString()}`;
+  }
+  return `ethereum:${token.address}@${chainId}/transfer?address=${to}&uint256=${amount.toString()}`;
 }
 
 export function explorerTx(network: PayNetwork | null, hash: string): string | null {
