@@ -14,7 +14,8 @@ export function LogoGrid({
   label,
   className,
 }: {
-  logos: readonly { name: string; src: string }[];
+  /** `mask`, when the logo is a filled tile: its mark alone, so the halftone keeps its shape. */
+  logos: readonly { name: string; src: string; mask?: string }[];
   columns: number;
   /** The one tile lit without the pointer, if any. */
   active?: string | undefined;
@@ -40,7 +41,7 @@ export function LogoGrid({
           <span
             aria-hidden="true"
             className="landing-chain-halftone"
-            style={{ "--logo": `url(${logo.src})` } as CSSProperties}
+            style={{ "--logo": `url(${"mask" in logo && logo.mask ? logo.mask : logo.src})` } as CSSProperties}
           />
           <Image
             src={logo.src}
@@ -64,7 +65,7 @@ export const CHAINS = [
   { name: "Base", src: "/logos/base.svg" },
   { name: "Hyperliquid", src: "/logos/hyperliquid.png" },
   { name: "Polygon", src: "/logos/polygon.svg" },
-  { name: "Tron", src: "/logos/tron.svg" },
+  { name: "Arc", src: "/logos/arc.svg", mask: "/logos/arc-mark.svg" },
   { name: "BNB Chain", src: "/logos/bnb-chain.svg" },
   { name: "Tempo", src: "/logos/tempo.svg" },
 ] as const;

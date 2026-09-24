@@ -3,6 +3,7 @@ import type { DepositStatus } from "@/lib/gum/types";
 export const CHAINS: Record<number, { name: string; slug: string; explorer: string }> = {
   8453: { name: "Base", slug: "base", explorer: "https://basescan.org" },
   42161: { name: "Arbitrum", slug: "arbitrum", explorer: "https://arbiscan.io" },
+  5042: { name: "Arc", slug: "arc", explorer: "https://explorer.arc.io" },
   143: { name: "Monad", slug: "monad", explorer: "https://monadexplorer.com" },
 };
 
