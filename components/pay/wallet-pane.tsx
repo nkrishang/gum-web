@@ -232,21 +232,22 @@ export function WalletPane({
     }
   }
 
+  // The card fills the pane, its rows sharing the height; the Pay button sits at the bottom.
   return (
-    <div className="space-y-3">
-      <div className="rounded-xl border border-(--pay-line)">
-        <div className="flex items-center gap-3 px-3.5 py-3">
+    <div className="flex flex-1 flex-col gap-3">
+      <div className="flex flex-1 flex-col rounded-xl border border-(--pay-line)">
+        <div className="flex min-h-[64px] flex-[1.3] items-center gap-3 px-3.5 py-3">
           {wallet.walletIcon ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={wallet.walletIcon} alt="" width={28} height={28} className="size-7 rounded-lg" />
+            <img src={wallet.walletIcon} alt="" width={36} height={36} className="size-9 rounded-xl" />
           ) : (
-            <span className="flex size-7 items-center justify-center rounded-lg bg-(--pay-sunk)">
-              <WalletIcon className="size-4" />
+            <span className="flex size-9 items-center justify-center rounded-xl bg-(--pay-sunk)">
+              <WalletIcon className="size-4.5" />
             </span>
           )}
           <div className="min-w-0 flex-1">
-            <p className="font-mono text-[13.5px] font-medium">{shortHex(wallet.address ?? "", 6, 4)}</p>
-            <p className="text-[12px] text-(--pay-muted)">{wallet.walletName ?? "Wallet"}</p>
+            <p className="font-mono text-[14.5px] font-medium">{shortHex(wallet.address ?? "", 6, 4)}</p>
+            <p className="text-[12.5px] text-(--pay-muted)">{wallet.walletName ?? "Wallet"}</p>
           </div>
           <button
             type="button"
@@ -260,8 +261,8 @@ export function WalletPane({
             Disconnect
           </button>
         </div>
-        <dl className="border-t border-(--pay-line) text-[13px]">
-          <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+        <dl className="flex flex-[2] flex-col border-t border-(--pay-line) text-[14px]">
+          <div className="flex min-h-[48px] flex-1 items-center justify-between gap-3 px-3.5 py-2.5">
             <dt className="text-(--pay-muted)">Network</dt>
             <dd className="flex items-center gap-1.5 font-medium">
               {onChain ? (
@@ -280,7 +281,7 @@ export function WalletPane({
               )}
             </dd>
           </div>
-          <div className="flex items-center justify-between gap-3 border-t border-(--pay-line) px-3.5 py-2.5">
+          <div className="flex min-h-[48px] flex-1 items-center justify-between gap-3 border-t border-(--pay-line) px-3.5 py-2.5">
             <dt className="text-(--pay-muted)">Balance</dt>
             <dd className={cn("tabular flex items-center gap-1.5 font-medium", insufficient && "text-(--pay-danger)")}>
               {wallet.tokenBalance === undefined ? (
@@ -352,7 +353,7 @@ function PairingView({
   const { option, uri, mobile } = pairing;
   const handoff = option.via === "handoff";
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex flex-1 flex-col">
       <button type="button" onClick={onBack} className={cn("flex items-center gap-1 self-start px-1 text-[13px]", INLINE_LINK)}>
         <ArrowLeftIcon className="size-3.5" aria-hidden />
         All wallets
