@@ -7,8 +7,8 @@ import { PAY_CHAINS } from "./networks";
 /**
  * The pay widget's wallet stack. Browser extensions arrive on their own through EIP-6963
  * discovery, one connector per installed wallet, so the picker lists what the payer actually has.
- * WalletConnect joins when a project id is configured and covers phone wallets with its own QR
- * and deep links. Reads (balances, receipts) go through our transports; the transfer itself is
+ * WalletConnect joins when a project id is configured and covers phone wallets; its own modal is
+ * off, and the widget shows the pairing QR code or deep link itself. Reads (balances, receipts) go through our transports; the transfer itself is
  * sent by the wallet on its own RPC.
  */
 
@@ -47,7 +47,8 @@ export const payWagmiConfig = createConfig({
       ? [
           walletConnect({
             projectId: walletConnectProjectId,
-            showQrModal: true,
+            // The page draws its own wallet list, QR codes and deep links from the pairing URI.
+            showQrModal: false,
             // The page's own origin: WalletConnect warns (and some wallets balk) when it differs.
             metadata: {
               name: "Gum",

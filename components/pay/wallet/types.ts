@@ -39,9 +39,15 @@ export interface WalletApi {
   options: WalletOption[];
   /** False until the browser has had a chance to discover wallets (never during server render). */
   optionsReady: boolean;
-  /** Resolves once connected. A popular wallet reports its pairing URI through `onUri` first. */
-  connect(optionId: string, onUri?: (uri: string) => void): Promise<void>;
-  /** Abandons a pairing in progress. */
+  /**
+   * Resolves once connected. A WalletConnect wallet reports its pairing URI through `onUri` first,
+   * for the page to show as a QR code or open as a deep link.
+   */
+  connect(option: WalletOption, onUri?: (uri: string) => void): Promise<void>;
+  /**
+   * The payer walked away from a pairing. WalletConnect can't retract a pairing (it just goes
+   * unscanned), so only test mode, whose "scan" happens by itself, has anything to stop.
+   */
   cancelConnect(): void;
   /** The payer was sent to finish in another app (a hand-off). Test mode plays the phone's part. */
   onHandoff(optionId: string): void;

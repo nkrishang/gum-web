@@ -63,7 +63,6 @@ export function useWagmiWallet(target: { chainId: number; token: Address } | nul
 
   const walletConnect = connectors.find((c) => c.type === "walletConnect");
   const coinbase = connectors.find((c) => c.type === "coinbaseWallet");
-  const restoreModal = React.useRef<(() => void) | null>(null);
 
   // Detected extensions, then popular wallets to fill the list, then "Explore wallets", last.
   const options = React.useMemo<WalletOption[]>(() => {
@@ -106,7 +105,7 @@ export function useWagmiWallet(target: { chainId: number; token: Address } | nul
           mobileLink: w.via === "walletconnect" ? w.mobileLink : undefined,
         }),
       );
-    const explore: WalletOption[] = walletConnect ? [{ id: walletConnect.uid, name: "Explore wallets", kind: "explore" }] : [];
+    const explore: WalletOption[] = walletConnect ? [{ id: "explore", name: "Explore wallets", kind: "explore" }] : [];
     return [...installed, ...popular, ...explore];
   }, [connectors, walletConnect, coinbase]);
 
@@ -149,46 +148,27 @@ export function useWagmiWallet(target: { chainId: number; token: Address } | nul
     walletIcon,
     options: mounted ? options : [],
     optionsReady: mounted,
-    async connect(optionId, onUri) {
-      if (optionId.startsWith("walletconnect:")) {
+    async connect(option, onUri) {
+      if (option.via === "walletconnect") {
         if (!walletConnect) throw new Error("That wallet is no longer available.");
-        // The same WalletConnect session, without its modal: the pane shows this wallet's own QR
-        // code (or opens the app on a phone) from the pairing URI instead.
-        const provider = (await walletConnect.getProvider()) as { rpc?: { showQrModal?: boolean } } | undefined;
-        const rpc = provider?.rpc;
-        const previous = rpc?.showQrModal ?? true;
-        // The provider reads the flag once, as a connect starts, so it goes back on as soon as the
-        // pairing URI exists. A pairing the payer walks away from never settles (WalletConnect can
-        // no longer abort one), so waiting for this connect to end would leave the modal off for
-        // "Explore wallets".
-        const restore = () => {
-          if (rpc) rpc.showQrModal = previous;
-          restoreModal.current = null;
-        };
-        restoreModal.current = restore;
-        if (rpc) rpc.showQrModal = false;
+        // WalletConnect's modal is off: the pairing URI arrives as a message, and the pane shows it
+        // as this wallet's QR code, or opens its app with it.
         const onMessage = ({ type, data }: { type: string; data?: unknown }) => {
-          if (type !== "display_uri" || typeof data !== "string") return;
-          restore();
-          onUri?.(data);
+          if (type === "display_uri" && typeof data === "string") onUri?.(data);
         };
         walletConnect.emitter.on("message", onMessage);
         try {
           await connectAsync({ connector: walletConnect });
         } finally {
-          restore();
           walletConnect.emitter.off("message", onMessage);
         }
         return;
       }
-      const connector = connectors.find((c) => c.uid === optionId);
+      const connector = connectors.find((c) => c.uid === option.id);
       if (!connector) throw new Error("That wallet is no longer available.");
       await connectAsync({ connector });
     },
-    // The abandoned pairing expires on its own; the pane stops listening to it.
-    cancelConnect() {
-      restoreModal.current?.();
-    },
+    cancelConnect() {},
     // The payer finishes in the other app; this page follows the deposit as usual.
     onHandoff() {},
     disconnect: () => disconnect(),

@@ -26,7 +26,7 @@ const OPTIONS: WalletOption[] = [
       mobileLink: w.via === "walletconnect" ? w.mobileLink : undefined,
     }),
   ),
-  { id: "sim-explore", name: "Explore wallets", kind: "explore" },
+  { id: "explore", name: "Explore wallets", kind: "explore" },
 ];
 
 /** A pairing URI shaped like WalletConnect's, for the popular-wallet QR code. */
@@ -35,9 +35,6 @@ function fakePairingUri() {
   const expiry = Math.floor(Date.now() / 1000) + 300;
   return `wc:${hex(32)}@2?relay-protocol=irn&symKey=${hex(32)}&expiryTimestamp=${expiry}`;
 }
-
-/** Who answers when the payer picks "Explore wallets": a phone wallet, over a simulated session. */
-const EXPLORE_PEER = { name: "Trust Wallet", icon: "/logos/trust.svg" };
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -51,7 +48,8 @@ export function useSimWallet(sim: Simulator): WalletApi {
   const behavior = controls.walletBehavior;
   const target = sim.network.chain.id;
   const [status, setStatus] = React.useState<WalletApi["status"]>("disconnected");
-  const [walletId, setWalletId] = React.useState<string | null>(null);
+  /** The wallet connected: a listed one, or any wallet picked from the directory. */
+  const [wallet, setWallet] = React.useState<WalletOption | null>(null);
   const [chainId, setChainId] = React.useState<number>(1);
   /** "Doesn't have the network": the payment's chain is unknown to the wallet until added. */
   const [added, setAdded] = React.useState(false);
@@ -67,8 +65,6 @@ export function useSimWallet(sim: Simulator): WalletApi {
   const startBalance = behavior === "insufficient" ? amount / 3n : amount * 4n + 1_234n * unit;
   const tokenBalance = status === "connected" ? (startBalance > spent ? startBalance - spent : 0n) : undefined;
   const nativeBalance = status === "connected" ? (behavior === "no_gas" ? 0n : 42_000_000_000_000_000n) : undefined;
-  const picked = OPTIONS.find((o) => o.id === walletId);
-  const wallet = picked?.kind === "explore" ? EXPLORE_PEER : picked;
 
   return {
     simulated: true,
@@ -79,10 +75,10 @@ export function useSimWallet(sim: Simulator): WalletApi {
     walletIcon: wallet?.icon,
     options: OPTIONS,
     optionsReady: true,
-    async connect(optionId, onUri) {
+    async connect(option, onUri) {
       const attempt = ++pairing.current;
       setStatus("connecting");
-      if (optionId.startsWith("walletconnect:")) {
+      if (option.via === "walletconnect") {
         // As if the payer scanned the code a few seconds later.
         await wait(250);
         onUri?.(fakePairingUri());
@@ -94,7 +90,8 @@ export function useSimWallet(sim: Simulator): WalletApi {
         setStatus("disconnected");
         throw Object.assign(new Error("User rejected the request."), { code: 4001 });
       }
-      setWalletId(optionId);
+      // "Scan with any wallet" answers as some phone wallet, as a real session would name it.
+      setWallet(option.id === "walletconnect:any" ? { ...option, name: "Trust Wallet", icon: "/logos/trust.svg" } : option);
       // Wallets usually come up on whatever network they were last on.
       setChainId(behavior === "wrong_chain" || behavior === "missing_chain" ? 1 : target);
       setStatus("connected");
@@ -112,7 +109,7 @@ export function useSimWallet(sim: Simulator): WalletApi {
     },
     disconnect() {
       setStatus("disconnected");
-      setWalletId(null);
+      setWallet(null);
     },
     async switchChain(id) {
       await wait(650);

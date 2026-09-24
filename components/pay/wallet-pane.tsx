@@ -7,16 +7,15 @@ import { formatUnits, shortHex } from "@/lib/format";
 import type { ResolvedAsset } from "@/lib/pay/networks";
 import type { PayDeposit } from "@/lib/pay/types";
 import { cn } from "@/lib/utils";
-import { ChainIcon, INLINE_LINK, Notice, Spinner } from "./bits";
-import { isUnknownChain, walletErrorMessage } from "./wallet/errors";
-import { phantomBrowseLink, walletDeepLink } from "@/lib/pay/wallets";
+import { phantomBrowseLink, walletCountLabel, walletDeepLink } from "@/lib/pay/wallets";
+import { ChainIcon, CopyPill, INLINE_LINK, Notice, Spinner, useCopied } from "./bits";
+import { ExploreView, useWalletCount } from "./explore";
 import { QrCode } from "./qr-code";
+import { isUnknownChain, walletErrorMessage } from "./wallet/errors";
 import type { WalletApi, WalletOption } from "./wallet/types";
 
 /** A few of the wallets behind "Explore wallets", as its icon. */
 const EXPLORE_LOGOS = ["/logos/metamask.svg", "/logos/rainbow.svg", "/logos/trust.svg", "/logos/coinbase.svg"];
-/** Wallets the WalletConnect modal lists for EVM chains ("340+" in September 2026), rounded down. */
-const EXPLORE_COUNT = "300+";
 
 const CHAIN_NAMES: Record<number, string> = {
   1: "Ethereum",
@@ -72,6 +71,10 @@ export function WalletPane({
   const [pairing, setPairing] = React.useState<{ option: WalletOption; uri: string | null; mobile: boolean } | null>(null);
   /** Bumped by each connect and by "All wallets", so an abandoned attempt's failure stays quiet. */
   const attempt = React.useRef(0);
+  /** The full directory, in place of the list, after "Explore wallets". */
+  const [exploring, setExploring] = React.useState(false);
+  const [exploreSearch, setExploreSearch] = React.useState("");
+  const exploreCount = useWalletCount(asset.verified ? asset.network.chain.id : null);
 
   if (!asset.verified) {
     return (
@@ -86,6 +89,36 @@ export function WalletPane({
   const token = asset.token;
   const shown = formatUnits(remaining.toString(), token.decimals);
   const connected = wallet.status === "connected" && Boolean(wallet.address);
+
+  const connectWith = async (option: WalletOption) => {
+    const mine = ++attempt.current;
+    setError(null);
+    // On a phone a wallet with an app link opens it; elsewhere its QR code is scanned with one.
+    const mobile = window.matchMedia("(pointer: coarse)").matches;
+    if (option.via === "handoff") {
+      // Nothing connects here: the payment page opens in the wallet's own browser and is paid
+      // there, while this page follows the deposit.
+      const link = phantomBrowseLink(window.location.href);
+      wallet.onHandoff(option.id);
+      if (mobile) window.location.assign(link);
+      else setPairing({ option, uri: link, mobile });
+      return;
+    }
+    setConnecting(option.id);
+    if (option.via === "walletconnect") setPairing({ option, uri: null, mobile });
+    try {
+      await wallet.connect(option, (uri) => {
+        setPairing((p) => (p && p.option.id === option.id ? { ...p, uri } : p));
+        if (mobile && option.mobileLink) window.location.assign(walletDeepLink(option.mobileLink, uri));
+      });
+      setPairing(null);
+      setExploring(false);
+    } catch (cause) {
+      if (mine === attempt.current) setError(walletErrorMessage(cause, "connect"));
+    } finally {
+      if (mine === attempt.current) setConnecting(null);
+    }
+  };
 
   if (!connected && pairing) {
     return (
@@ -103,36 +136,26 @@ export function WalletPane({
     );
   }
 
-  if (!connected) {
-    const connectWith = async (option: WalletOption) => {
-      const mine = ++attempt.current;
-      setError(null);
-      // On a phone a popular wallet opens its app; elsewhere its QR code is scanned with one.
-      const mobile = window.matchMedia("(pointer: coarse)").matches;
-      if (option.via === "handoff") {
-        // Nothing connects here: the payment page opens in the wallet's own browser and is paid
-        // there, while this page follows the deposit.
-        const link = phantomBrowseLink(window.location.href);
-        wallet.onHandoff(option.id);
-        if (mobile) window.location.assign(link);
-        else setPairing({ option, uri: link, mobile });
-        return;
-      }
-      setConnecting(option.id);
-      if (option.via === "walletconnect") setPairing({ option, uri: null, mobile });
-      try {
-        await wallet.connect(option.id, (uri) => {
-          setPairing((p) => (p && p.option.id === option.id ? { ...p, uri } : p));
-          if (mobile && option.mobileLink) window.location.assign(walletDeepLink(option.mobileLink, uri));
-        });
-        setPairing(null);
-      } catch (cause) {
-        if (mine === attempt.current) setError(walletErrorMessage(cause, "connect"));
-      } finally {
-        if (mine === attempt.current) setConnecting(null);
-      }
-    };
+  if (!connected && exploring) {
+    return (
+      <ExploreView
+        chainId={target.chain.id}
+        networkName={target.name}
+        connecting={connecting}
+        error={error}
+        search={exploreSearch}
+        onSearch={setExploreSearch}
+        onPick={connectWith}
+        onBack={() => {
+          setExploring(false);
+          setExploreSearch("");
+          setError(null);
+        }}
+      />
+    );
+  }
 
+  if (!connected) {
     return (
       <div className="space-y-2">
         <p className="px-1 pb-1 text-[13px] text-(--pay-muted)">Pay on this page directly.</p>
@@ -152,7 +175,7 @@ export function WalletPane({
             key={option.id}
             type="button"
             disabled={connecting !== null}
-            onClick={() => connectWith(option)}
+            onClick={() => (option.kind === "explore" ? setExploring(true) : connectWith(option))}
             className="group flex h-[52px] w-full items-center gap-3 rounded-xl border border-(--pay-line) bg-(--pay-card) px-3.5 text-left transition-colors hover:border-(--pay-ink)/25 hover:bg-(--pay-soft) disabled:opacity-60"
           >
             {option.kind === "explore" ? (
@@ -173,9 +196,9 @@ export function WalletPane({
             <span className="flex-1 text-[14.5px] font-medium">{option.name}</span>
             {option.kind === "installed" ? (
               <span className="text-[12px] text-(--pay-faint)">Detected</span>
-            ) : option.kind === "explore" ? (
+            ) : option.kind === "explore" && exploreCount !== null && walletCountLabel(exploreCount) ? (
               <span className="tabular rounded-full bg-(--pay-soft) px-2 py-0.5 text-[11.5px] font-medium text-(--pay-muted)">
-                {EXPLORE_COUNT}
+                {walletCountLabel(exploreCount)}
               </span>
             ) : null}
             {connecting === option.id ? (
@@ -378,8 +401,12 @@ function PairingView({
   error: string | null;
   onBack: () => void;
 }) {
-  const { option, uri, mobile } = pairing;
+  const { option, uri } = pairing;
   const handoff = option.via === "handoff";
+  // A phone opens the wallet's app when it has a link for it; otherwise it gets the code and a
+  // link to copy into the wallet, like a computer does.
+  const mobile = pairing.mobile && Boolean(option.mobileLink);
+  const { copied, copy } = useCopied();
   return (
     <div className="flex flex-1 flex-col">
       <button type="button" onClick={onBack} className={cn("flex items-center gap-1 self-start px-1 text-[13px]", INLINE_LINK)}>
@@ -434,6 +461,9 @@ function PairingView({
                 <p className="mt-1 text-center text-[13px] text-(--pay-muted)">
                   Open {option.name} on your phone and scan to connect.
                 </p>
+                {uri ? (
+                  <CopyPill className="mt-3" label="Copy connection link" copied={copied === "uri"} onCopy={() => void copy("uri", uri)} />
+                ) : null}
               </>
             )}
           </>

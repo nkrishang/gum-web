@@ -53,3 +53,25 @@ export function phantomBrowseLink(pageUrl: string): string {
   const ref = new URL(pageUrl).origin;
   return `https://phantom.app/ul/browse/${encodeURIComponent(pageUrl)}?ref=${encodeURIComponent(ref)}`;
 }
+
+/** A wallet from WalletConnect's directory, as `/api/wallets` serves it. */
+export interface RegistryWallet {
+  id: string;
+  name: string;
+  /** Our proxy of its logo. */
+  image?: string;
+  /** Its app's WalletConnect deep link, when it has one. */
+  mobileLink?: string;
+  rdns?: string;
+}
+
+export interface WalletPage {
+  count: number;
+  wallets: RegistryWallet[];
+}
+
+/** "90+", "340+": rounded down to ten, so it stays true as the directory changes. */
+export function walletCountLabel(count: number): string | null {
+  if (count < 10) return count > 0 ? String(count) : null;
+  return `${Math.floor(count / 10) * 10}+`;
+}
