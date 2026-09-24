@@ -17,6 +17,7 @@ const RPC_OVERRIDES: Record<number, string | undefined> = {
   8453: process.env.NEXT_PUBLIC_RPC_URL_8453,
   42161: process.env.NEXT_PUBLIC_RPC_URL_42161,
   143: process.env.NEXT_PUBLIC_RPC_URL_143,
+  5042: process.env.NEXT_PUBLIC_RPC_URL_5042,
 };
 
 const transports = Object.fromEntries(

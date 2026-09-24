@@ -21,14 +21,15 @@ const SETTLES_ON = [
   { name: "Monad", src: "/payment-icons/monad.svg" },
   { name: "Base", src: "/logos/base.svg" },
   { name: "Arbitrum", src: "/logos/arbitrum.svg" },
+  { name: "Arc", src: "/logos/arc.svg" },
 ] as const;
 
 /** Whose balance the deposit lands in: a user of the merchant's app. */
 const USER = "james@myapp.xyz";
 
-/** Where each currency can settle: USDT has no Base contract Gum will use. */
+/** Where each currency can settle: USDT has no Base contract Gum will use, and Arc is USDC only. */
 const SETTLES_FOR: Record<Currency, readonly number[]> = {
-  USDC: [0, 1, 2],
+  USDC: [0, 1, 2, 3],
   USDT: [0, 2],
   AUSD: [0, 1, 2],
 };

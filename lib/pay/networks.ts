@@ -1,5 +1,5 @@
 import { getAddress, isAddress, type Address, type Chain } from "viem";
-import { arbitrum, base, monad } from "viem/chains";
+import { arbitrum, arc, base, monad } from "viem/chains";
 import type { PayDeposit } from "./types";
 
 /**
@@ -71,6 +71,20 @@ export const NETWORKS: Record<number, PayNetwork> = {
       { symbol: "USDC", address: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603", decimals: 6, icon: USDC_ICON },
       { symbol: "USDT", address: "0xe7cd86e13AC4309349F30B3435a9d337750fC82D", decimals: 6, icon: USDT_ICON },
       { symbol: "AUSD", address: "0x00000000eFE302BEAA2b3e6e1b18d08D69a9012a", decimals: 6, icon: AUSD_ICON },
+    ],
+  },
+  // Circle's L1. USDC is the gas token: one balance behind native USDC (18 decimals) and this ERC-20
+  // (6 decimals). The page pays through the ERC-20, like every other chain; gum-indexer counts both.
+  [arc.id]: {
+    chain: arc,
+    name: "Arc",
+    slug: "arc",
+    icon: "/logos/arc.svg",
+    nativeSymbol: "USDC",
+    explorer: "https://explorer.arc.io",
+    blockTimeMs: 500,
+    tokens: [
+      { symbol: "USDC", address: "0x3600000000000000000000000000000000000000", decimals: 6, icon: USDC_ICON },
     ],
   },
 };

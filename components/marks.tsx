@@ -14,6 +14,7 @@ const CHAIN_MARKS: Record<number, string> = {
   8453: "/logos/base.svg",
   42161: "/logos/arbitrum.svg",
   143: "/payment-icons/monad.svg",
+  5042: "/logos/arc.svg",
 };
 
 function Fallback({ letter, className }: { letter: string; className?: string }) {
