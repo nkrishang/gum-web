@@ -7,7 +7,7 @@ import { formatUnits } from "@/lib/format";
 import { eip681, type ResolvedAsset } from "@/lib/pay/networks";
 import type { PayDeposit } from "@/lib/pay/types";
 import { cn } from "@/lib/utils";
-import { ChainIcon, CopyPill, INLINE_LINK, Notice, useCopied } from "./bits";
+import { ChainIcon, CopyPill, INLINE_LINK, useCopied } from "./bits";
 import { QrCode } from "./qr-code";
 
 interface PaneProps {
@@ -76,11 +76,13 @@ export function QrPane({ deposit, asset, remaining }: PaneProps) {
             on <span className="text-(--pay-ink)">{chainLabel(asset)}</span> for you.
           </p>
         ) : (
-          <Notice tone="warn" icon={<TriangleAlertIcon />} className="mt-3 w-full">
-            This code holds only the address. In your wallet, pick <strong>{deposit.token}</strong> on{" "}
-            <strong>{chainLabel(asset)}</strong> and enter{" "}
-            <strong className="tabular">{shown}</strong> yourself.
-          </Notice>
+          // As tall as the request mode's line, so the way back stays in the frame.
+          <p className="mt-3 max-w-[320px] text-center text-[13px] leading-relaxed text-(--pay-warn)">
+            <TriangleAlertIcon className="-mt-0.5 mr-1 inline size-3.5" aria-hidden />
+            Address only. In your wallet, pick <strong className="font-semibold">{deposit.token}</strong> on{" "}
+            <strong className="font-semibold">{chainLabel(asset)}</strong> and enter{" "}
+            <strong className="tabular font-semibold">{shown}</strong> yourself.
+          </p>
         )}
         {asset.verified ? (
           <button
