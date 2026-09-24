@@ -146,7 +146,7 @@ export function ExploreView({
         />
       </label>
 
-      <div className="-mx-1 mt-2 min-h-0 flex-1 overflow-y-auto px-1" onScroll={onScroll}>
+      <div className="mt-2 min-h-0 flex-1 overflow-x-hidden overflow-y-auto" onScroll={onScroll}>
         {!query ? (
           <button type="button" disabled={connecting !== null} onClick={() => onPick(ANY_WALLET)} className={row}>
             <span className="flex size-7 items-center justify-center rounded-lg bg-(--pay-sunk)">
