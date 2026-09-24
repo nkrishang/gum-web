@@ -14,6 +14,7 @@ import {
   useWriteContract,
 } from "wagmi";
 import { getConnection, simulateContract, waitForTransactionReceipt } from "wagmi/actions";
+import { popularFill } from "@/lib/pay/wallets";
 import type { TransferRequest, WalletApi, WalletOption } from "./types";
 
 const ZERO: Address = "0x0000000000000000000000000000000000000000";
@@ -56,24 +57,35 @@ export function useWagmiWallet(target: { chainId: number; token: Address } | nul
     query: { enabled, refetchInterval: 12_000 },
   });
 
+  const walletConnect = connectors.find((c) => c.type === "walletConnect");
+  const restoreModal = React.useRef<(() => void) | null>(null);
+
+  // Detected extensions, then popular wallets to fill the list, then "Explore wallets", last.
   const options = React.useMemo<WalletOption[]>(() => {
     const discovered = connectors.filter((c) => c.type === "injected" && c.id !== "injected");
     const seen = new Set<string>();
-    const out: WalletOption[] = [];
+    const installed: WalletOption[] = [];
     for (const c of connectors) {
+      if (c.type === "walletConnect") continue;
       // The generic injected connector only matters when nothing announced itself.
       if (c.id === "injected" && discovered.length > 0) continue;
       const key = c.name.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push(
-        c.type === "walletConnect"
-          ? { id: c.uid, name: "Explore wallets", kind: "explore" }
-          : { id: c.uid, name: c.id === "injected" ? "Browser wallet" : c.name, icon: c.icon, kind: "installed" },
-      );
+      installed.push({ id: c.uid, name: c.id === "injected" ? "Browser wallet" : c.name, icon: c.icon, kind: "installed" });
     }
-    return out.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "installed" ? -1 : 1));
-  }, [connectors]);
+    if (!walletConnect) return installed;
+    // EIP-6963 connectors are keyed by the wallet's rdns.
+    const detected = discovered.map((c) => ({ name: c.name, rdns: c.id }));
+    const popular: WalletOption[] = popularFill(detected).map((w) => ({
+      id: `popular:${w.rdns}`,
+      name: w.name,
+      icon: w.icon,
+      kind: "popular",
+      mobileLink: w.mobileLink,
+    }));
+    return [...installed, ...popular, { id: walletConnect.uid, name: "Explore wallets", kind: "explore" }];
+  }, [connectors, walletConnect]);
 
   // Through WalletConnect the connector is "WalletConnect"; the wallet the payer actually picked
   // introduces itself in the session. Keyed by connector and account so a stale name never shows.
@@ -111,10 +123,45 @@ export function useWagmiWallet(target: { chainId: number; token: Address } | nul
     walletIcon,
     options: mounted ? options : [],
     optionsReady: mounted,
-    async connect(optionId) {
+    async connect(optionId, onUri) {
+      if (optionId.startsWith("popular:")) {
+        if (!walletConnect) throw new Error("That wallet is no longer available.");
+        // The same WalletConnect session, without its modal: the pane shows this wallet's own QR
+        // code (or opens the app on a phone) from the pairing URI instead.
+        const provider = (await walletConnect.getProvider()) as { rpc?: { showQrModal?: boolean } } | undefined;
+        const rpc = provider?.rpc;
+        const previous = rpc?.showQrModal ?? true;
+        // The provider reads the flag once, as a connect starts, so it goes back on as soon as the
+        // pairing URI exists. A pairing the payer walks away from never settles (WalletConnect can
+        // no longer abort one), so waiting for this connect to end would leave the modal off for
+        // "Explore wallets".
+        const restore = () => {
+          if (rpc) rpc.showQrModal = previous;
+          restoreModal.current = null;
+        };
+        restoreModal.current = restore;
+        if (rpc) rpc.showQrModal = false;
+        const onMessage = ({ type, data }: { type: string; data?: unknown }) => {
+          if (type !== "display_uri" || typeof data !== "string") return;
+          restore();
+          onUri?.(data);
+        };
+        walletConnect.emitter.on("message", onMessage);
+        try {
+          await connectAsync({ connector: walletConnect });
+        } finally {
+          restore();
+          walletConnect.emitter.off("message", onMessage);
+        }
+        return;
+      }
       const connector = connectors.find((c) => c.uid === optionId);
       if (!connector) throw new Error("That wallet is no longer available.");
       await connectAsync({ connector });
+    },
+    // The abandoned pairing expires on its own; the pane stops listening to it.
+    cancelConnect() {
+      restoreModal.current?.();
     },
     disconnect: () => disconnect(),
     async switchChain(chainId) {

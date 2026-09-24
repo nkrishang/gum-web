@@ -2,19 +2,21 @@
 
 import * as React from "react";
 import type { Address, Hex } from "viem";
-import { ArrowRightIcon, CheckIcon, ChevronRightIcon, TriangleAlertIcon, WalletIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, ChevronRightIcon, TriangleAlertIcon, WalletIcon } from "lucide-react";
 import { formatUnits, shortHex } from "@/lib/format";
 import type { ResolvedAsset } from "@/lib/pay/networks";
 import type { PayDeposit } from "@/lib/pay/types";
 import { cn } from "@/lib/utils";
 import { ChainIcon, INLINE_LINK, Notice, Spinner } from "./bits";
 import { walletErrorMessage } from "./wallet/errors";
-import type { WalletApi } from "./wallet/types";
+import { walletDeepLink } from "@/lib/pay/wallets";
+import { QrCode } from "./qr-code";
+import type { WalletApi, WalletOption } from "./wallet/types";
 
 /** A few of the wallets behind "Explore wallets", as its icon. */
 const EXPLORE_LOGOS = ["/logos/metamask.svg", "/logos/rainbow.svg", "/logos/trust.svg", "/logos/coinbase.svg"];
-/** The WalletConnect catalogue the modal offers (616 wallets, September 2026), rounded down. */
-const EXPLORE_COUNT = "600+";
+/** Wallets the WalletConnect modal lists for EVM chains ("340+" in September 2026), rounded down. */
+const EXPLORE_COUNT = "300+";
 
 const CHAIN_NAMES: Record<number, string> = {
   1: "Ethereum",
@@ -63,6 +65,10 @@ export function WalletPane({
   const [stage, setStage] = React.useState<null | "switching" | "signing">(null);
   const [connecting, setConnecting] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  /** A popular wallet being paired over WalletConnect: its QR code (or deep link) while we wait. */
+  const [pairing, setPairing] = React.useState<{ option: WalletOption; uri: string | null; mobile: boolean } | null>(null);
+  /** Bumped by each connect and by "All wallets", so an abandoned attempt's failure stays quiet. */
+  const attempt = React.useRef(0);
 
   if (!asset.verified) {
     return (
@@ -78,31 +84,48 @@ export function WalletPane({
   const shown = formatUnits(remaining.toString(), token.decimals);
   const connected = wallet.status === "connected" && Boolean(wallet.address);
 
+  if (!connected && pairing) {
+    return (
+      <PairingView
+        pairing={pairing}
+        error={error}
+        onBack={() => {
+          attempt.current++;
+          wallet.cancelConnect();
+          setPairing(null);
+          setConnecting(null);
+          setError(null);
+        }}
+      />
+    );
+  }
+
   if (!connected) {
-    const installed = wallet.options.filter((o) => o.kind === "installed");
-    const explore = wallet.options.filter((o) => o.kind === "explore");
-    const connectWith = async (id: string) => {
+    const connectWith = async (option: WalletOption) => {
+      const mine = ++attempt.current;
       setError(null);
-      setConnecting(id);
+      setConnecting(option.id);
+      // On a phone a popular wallet opens its app; elsewhere its QR code is scanned with one.
+      const mobile = window.matchMedia("(pointer: coarse)").matches;
+      if (option.kind === "popular") setPairing({ option, uri: null, mobile });
       try {
-        await wallet.connect(id);
+        await wallet.connect(option.id, (uri) => {
+          setPairing((p) => (p && p.option.id === option.id ? { ...p, uri } : p));
+          if (mobile && option.mobileLink) window.location.href = walletDeepLink(option.mobileLink, uri);
+        });
+        setPairing(null);
       } catch (cause) {
-        setError(walletErrorMessage(cause));
+        if (mine === attempt.current) setError(walletErrorMessage(cause, "connect"));
       } finally {
-        setConnecting(null);
+        if (mine === attempt.current) setConnecting(null);
       }
     };
-    const row =
-      "group flex h-14 w-full items-center gap-3 rounded-xl border border-(--pay-line) bg-(--pay-card) px-3.5 text-left transition-colors hover:border-(--pay-ink)/25 hover:bg-(--pay-soft) disabled:opacity-60";
 
     return (
       <div className="space-y-2">
         <p className="px-1 pb-1 text-[13px] text-(--pay-muted)">Pay on this page directly.</p>
         {!wallet.optionsReady ? (
-          <>
-            <div className="h-14 animate-pulse rounded-xl bg-(--pay-soft)" />
-            <div className="h-14 animate-pulse rounded-xl bg-(--pay-soft)" />
-          </>
+          Array.from({ length: 6 }, (_, i) => <div key={i} className="h-[52px] animate-pulse rounded-xl bg-(--pay-soft)" />)
         ) : wallet.options.length === 0 ? (
           <Notice icon={<WalletIcon />}>
             No wallet found in this browser.{" "}
@@ -112,9 +135,22 @@ export function WalletPane({
             with your phone&apos;s wallet instead.
           </Notice>
         ) : null}
-        {installed.map((option) => (
-          <button key={option.id} type="button" disabled={connecting !== null} onClick={() => connectWith(option.id)} className={row}>
-            {option.icon ? (
+        {wallet.options.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            disabled={connecting !== null}
+            onClick={() => connectWith(option)}
+            className="group flex h-[52px] w-full items-center gap-3 rounded-xl border border-(--pay-line) bg-(--pay-card) px-3.5 text-left transition-colors hover:border-(--pay-ink)/25 hover:bg-(--pay-soft) disabled:opacity-60"
+          >
+            {option.kind === "explore" ? (
+              <span className="grid size-7 grid-cols-2 gap-[2px] rounded-lg bg-(--pay-soft) p-[3px]" aria-hidden>
+                {EXPLORE_LOGOS.map((src) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={src} src={src} alt="" width={11} height={11} className="size-full rounded-[3px] object-contain" />
+                ))}
+              </span>
+            ) : option.icon ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={option.icon} alt="" width={28} height={28} className="size-7 rounded-lg" />
             ) : (
@@ -123,7 +159,13 @@ export function WalletPane({
               </span>
             )}
             <span className="flex-1 text-[14.5px] font-medium">{option.name}</span>
-            <span className="text-[12px] text-(--pay-faint)">Detected</span>
+            {option.kind === "installed" ? (
+              <span className="text-[12px] text-(--pay-faint)">Detected</span>
+            ) : option.kind === "explore" ? (
+              <span className="tabular rounded-full bg-(--pay-soft) px-2 py-0.5 text-[11.5px] font-medium text-(--pay-muted)">
+                {EXPLORE_COUNT}
+              </span>
+            ) : null}
             {connecting === option.id ? (
               <Spinner className="text-(--pay-muted)" />
             ) : (
@@ -131,34 +173,6 @@ export function WalletPane({
             )}
           </button>
         ))}
-        {explore.map((option) => (
-          <button key={option.id} type="button" disabled={connecting !== null} onClick={() => connectWith(option.id)} className={row}>
-            <span className="grid size-7 grid-cols-2 gap-[2px] rounded-lg bg-(--pay-soft) p-[3px]" aria-hidden>
-              {EXPLORE_LOGOS.map((src) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={src} src={src} alt="" width={11} height={11} className="size-full rounded-[3px] object-contain" />
-              ))}
-            </span>
-            <span className="flex-1 text-[14.5px] font-medium">{option.name}</span>
-            <span className="rounded-full bg-(--pay-soft) px-2 py-0.5 text-[11.5px] font-medium text-(--pay-muted) tabular">
-              {EXPLORE_COUNT}
-            </span>
-            {connecting === option.id ? (
-              <Spinner className="text-(--pay-muted)" />
-            ) : (
-              <ChevronRightIcon className="size-4 text-(--pay-faint) transition-transform group-hover:translate-x-0.5" />
-            )}
-          </button>
-        ))}
-        {wallet.optionsReady && installed.length === 0 && explore.length > 0 ? (
-          <p className="px-1 pt-1 text-[12.5px] text-(--pay-muted)">
-            No wallet in this browser.{" "}
-            <button type="button" onClick={onUseQr} className={INLINE_LINK}>
-              Scan with your phone
-            </button>{" "}
-            instead.
-          </p>
-        ) : null}
         {error ? (
           <p role="alert" className="px-1 text-[13px] text-(--pay-danger)">
             {error}
@@ -309,6 +323,69 @@ export function WalletPane({
           {error}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Pairing a popular wallet over WalletConnect, inside the pane: on a computer, a QR code for that
+ * wallet's app to scan; on a phone, the app opens by itself, with a button in case it didn't.
+ */
+function PairingView({
+  pairing,
+  error,
+  onBack,
+}: {
+  pairing: { option: WalletOption; uri: string | null; mobile: boolean };
+  error: string | null;
+  onBack: () => void;
+}) {
+  const { option, uri, mobile } = pairing;
+  return (
+    <div className="flex h-full flex-col">
+      <button type="button" onClick={onBack} className={cn("flex items-center gap-1 self-start px-1 text-[13px]", INLINE_LINK)}>
+        <ArrowLeftIcon className="size-3.5" aria-hidden />
+        All wallets
+      </button>
+      <div className="flex flex-1 flex-col items-center justify-center pt-3">
+        {mobile ? (
+          <>
+            {option.icon ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={option.icon} alt="" width={56} height={56} className="size-14 rounded-2xl" />
+            ) : null}
+            <p className="mt-4 text-[15px] font-semibold">Opening {option.name}…</p>
+            <p className="mt-1 text-center text-[13px] text-(--pay-muted)">Approve the connection there, then come back here to pay.</p>
+            {uri && option.mobileLink ? (
+              <a
+                href={walletDeepLink(option.mobileLink, uri)}
+                className="mt-5 flex h-11 items-center justify-center rounded-xl bg-(--pay-button) px-5 text-[14px] font-semibold text-(--pay-button-ink)"
+              >
+                Open {option.name}
+              </a>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <div className="rounded-2xl border border-(--pay-line) bg-white p-3">
+              {uri ? (
+                <QrCode value={uri} logo={option.icon} size={212} label={`Scan with ${option.name} to connect`} />
+              ) : (
+                <div className="size-[212px] animate-pulse rounded-lg bg-(--pay-soft)" aria-label="Preparing the code" />
+              )}
+            </div>
+            <p className="mt-4 text-[15px] font-semibold">Scan with {option.name}</p>
+            <p className="mt-1 text-center text-[13px] text-(--pay-muted)">
+              Open {option.name} on your phone and scan to connect.
+            </p>
+          </>
+        )}
+        {error ? (
+          <p role="alert" className="mt-3 text-center text-[13px] text-(--pay-danger)">
+            {error}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

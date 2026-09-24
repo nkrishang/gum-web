@@ -3,13 +3,29 @@
 import * as React from "react";
 import type { Address, Hex } from "viem";
 import { SIM_PAYER, type Simulator } from "@/lib/pay/simulator";
+import { popularFill } from "@/lib/pay/wallets";
 import type { WalletApi, WalletOption } from "./types";
 
-const OPTIONS: WalletOption[] = [
+const INSTALLED: WalletOption[] = [
   { id: "sim-metamask", name: "MetaMask", icon: "/logos/metamask.svg", kind: "installed" },
   { id: "sim-rabby", name: "Rabby", icon: "/logos/rabby.svg", kind: "installed" },
+];
+
+const OPTIONS: WalletOption[] = [
+  ...INSTALLED,
+  ...popularFill([
+    { name: "MetaMask", rdns: "io.metamask" },
+    { name: "Rabby", rdns: "io.rabby" },
+  ]).map((w): WalletOption => ({ id: `popular:${w.rdns}`, name: w.name, icon: w.icon, kind: "popular", mobileLink: w.mobileLink })),
   { id: "sim-explore", name: "Explore wallets", kind: "explore" },
 ];
+
+/** A pairing URI shaped like WalletConnect's, for the popular-wallet QR code. */
+function fakePairingUri() {
+  const hex = (n: number) => Array.from(crypto.getRandomValues(new Uint8Array(n)), (b) => b.toString(16).padStart(2, "0")).join("");
+  const expiry = Math.floor(Date.now() / 1000) + 300;
+  return `wc:${hex(32)}@2?relay-protocol=irn&symKey=${hex(32)}&expiryTimestamp=${expiry}`;
+}
 
 /** Who answers when the payer picks "Explore wallets": a phone wallet, over a simulated session. */
 const EXPLORE_PEER = { name: "Trust Wallet", icon: "/logos/trust.svg" };
@@ -30,6 +46,7 @@ export function useSimWallet(sim: Simulator): WalletApi {
   const [chainId, setChainId] = React.useState<number>(1);
   const [spent, setSpent] = React.useState(0n);
   const reverts = React.useRef(new Set<Hex>());
+  const pairing = React.useRef(0);
 
   const deposit = React.useSyncExternalStore(sim.subscribe, () => sim.getSnapshot().deposit, () => null);
   const amount = deposit ? BigInt(deposit.amount) : 0n;
@@ -49,8 +66,16 @@ export function useSimWallet(sim: Simulator): WalletApi {
     walletIcon: wallet?.icon,
     options: OPTIONS,
     optionsReady: true,
-    async connect(optionId) {
+    async connect(optionId, onUri) {
+      const attempt = ++pairing.current;
       setStatus("connecting");
+      if (optionId.startsWith("popular:")) {
+        // As if the payer scanned the code a few seconds later.
+        await wait(250);
+        onUri?.(fakePairingUri());
+        await wait(3_500);
+        if (attempt !== pairing.current) throw new Error("Connection request reset.");
+      }
       await wait(700);
       if (behavior === "reject") {
         setStatus("disconnected");
@@ -60,6 +85,10 @@ export function useSimWallet(sim: Simulator): WalletApi {
       // Wallets usually come up on whatever network they were last on.
       setChainId(behavior === "wrong_chain" ? 1 : target);
       setStatus("connected");
+    },
+    cancelConnect() {
+      pairing.current++;
+      setStatus("disconnected");
     },
     disconnect() {
       setStatus("disconnected");

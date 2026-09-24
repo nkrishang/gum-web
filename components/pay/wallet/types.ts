@@ -11,10 +11,13 @@ export interface WalletOption {
   name: string;
   icon?: string;
   /**
-   * "installed": an extension that announced itself in this browser. "explore": every other
-   * wallet, phone or desktop, through the WalletConnect modal's catalogue.
+   * "installed": an extension that announced itself in this browser. "popular": a well-known
+   * wallet that isn't installed, paired over WalletConnect by its own QR code or deep link.
+   * "explore": every other wallet, through the WalletConnect modal's catalogue. Always last.
    */
-  kind: "installed" | "explore";
+  kind: "installed" | "popular" | "explore";
+  /** Popular wallets: the app's WalletConnect deep link. */
+  mobileLink?: string;
 }
 
 export interface TransferRequest {
@@ -34,7 +37,10 @@ export interface WalletApi {
   options: WalletOption[];
   /** False until the browser has had a chance to discover wallets (never during server render). */
   optionsReady: boolean;
-  connect(optionId: string): Promise<void>;
+  /** Resolves once connected. A popular wallet reports its pairing URI through `onUri` first. */
+  connect(optionId: string, onUri?: (uri: string) => void): Promise<void>;
+  /** Abandons a pairing in progress. */
+  cancelConnect(): void;
   disconnect(): void;
   switchChain(chainId: number): Promise<void>;
   /** On the payment's chain. Undefined while unknown. */
