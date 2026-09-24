@@ -236,7 +236,7 @@ export function WalletPane({
   return (
     <div className="flex flex-1 flex-col gap-3">
       <div className="flex flex-col rounded-xl border border-(--pay-line)">
-        <div className="flex h-[84px] items-center gap-3 px-3.5">
+        <div className="flex h-[104px] items-center gap-3 px-3.5">
           {wallet.walletIcon ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={wallet.walletIcon} alt="" width={36} height={36} className="size-9 rounded-xl" />
@@ -262,7 +262,7 @@ export function WalletPane({
           </button>
         </div>
         <dl className="flex flex-col border-t border-(--pay-line) text-[14px]">
-          <div className="flex h-16 items-center justify-between gap-3 px-3.5">
+          <div className="flex h-[84px] items-center justify-between gap-3 px-3.5">
             <dt className="text-(--pay-muted)">Network</dt>
             <dd className="flex items-center gap-1.5 font-medium">
               {onChain ? (
@@ -281,7 +281,7 @@ export function WalletPane({
               )}
             </dd>
           </div>
-          <div className="flex h-16 items-center justify-between gap-3 border-t border-(--pay-line) px-3.5">
+          <div className="flex h-[84px] items-center justify-between gap-3 border-t border-(--pay-line) px-3.5">
             <dt className="text-(--pay-muted)">Balance</dt>
             <dd className={cn("tabular flex items-center gap-1.5 font-medium", insufficient && "text-(--pay-danger)")}>
               {wallet.tokenBalance === undefined ? (
