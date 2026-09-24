@@ -14,6 +14,8 @@ import {
   useWriteContract,
 } from "wagmi";
 import { getConnection, simulateContract, waitForTransactionReceipt } from "wagmi/actions";
+import { readBalances } from "@/lib/pay/routes/chain";
+import { executeRoute } from "@/lib/pay/routes/execute";
 import { popularFill, WALLET_ROWS } from "@/lib/pay/wallets";
 import type { TransferRequest, WalletApi, WalletOption } from "./types";
 
@@ -233,6 +235,16 @@ export function useWagmiWallet(target: { chainId: number; token: Address } | nul
     async waitForReceipt(hash: Hex, chainId: number) {
       const receipt = await waitForTransactionReceipt(config, { hash, chainId });
       return receipt.status;
+    },
+    async readBalances(chain, tokens) {
+      if (!address) return tokens.map(() => null);
+      return readBalances(chain, address, tokens);
+    },
+    async executeRoute(quote, chain, onStage) {
+      const now = getConnection(config);
+      if (!now.address || !now.connector) throw new Error("Connect a wallet first.");
+      const provider = (await now.connector.getProvider()) as EIP1193Provider;
+      return executeRoute({ provider, account: now.address, quote, chain, onStage });
     },
   };
 }

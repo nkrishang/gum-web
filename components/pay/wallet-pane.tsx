@@ -8,9 +8,13 @@ import type { ResolvedAsset } from "@/lib/pay/networks";
 import type { PayDeposit } from "@/lib/pay/types";
 import { cn } from "@/lib/utils";
 import { phantomBrowseLink, walletCountLabel, walletDeepLink } from "@/lib/pay/wallets";
+import type { RoutesClient } from "@/lib/pay/routes/client";
 import { ChainIcon, CopyPill, INLINE_LINK, Notice, Spinner, useCopied } from "./bits";
 import { ExploreView, useWalletCount } from "./explore";
+import { formatBalance, OptionMark, PayWithPicker } from "./pay-with";
 import { QrCode } from "./qr-code";
+import { RouteView } from "./route-view";
+import type { PayWith } from "./use-pay-with";
 import { isUnknownChain, walletErrorMessage } from "./wallet/errors";
 import type { WalletApi, WalletOption } from "./wallet/types";
 
@@ -42,11 +46,30 @@ export interface SentPayment {
   amount: string;
   from?: string;
   reverted?: boolean;
+  /** Paid through a Relay route from another token or chain: `hash` is its origin transaction. */
+  route?: SentRoute;
+}
+
+export interface SentRoute {
+  requestId: string;
+  chainId: number;
+  chainName: string;
+  chainIcon?: string | null;
+  explorer: string;
+  symbol: string;
+  logo?: string;
+  /** What left the payer's wallet, base units. */
+  amount: string;
+  decimals: number;
+  timeEstimateSecs?: number;
 }
 
 /**
- * Paying from a connected wallet is one plain ERC-20 `transfer` to the payment address: no
- * approval, no contract call, nothing that could send the funds anywhere else. The amount is read
+ * Paying from a connected wallet, in the requested token on the requested chain (the default), is
+ * one plain ERC-20 `transfer` to the payment address: no approval, no contract call, nothing that
+ * could send the funds anywhere else. Anything else the wallet holds, on any chain Relay supports,
+ * is offered under "Pay with" and paid through a route gum-server has pinned to this payment (see
+ * `RouteView`). The amount is read
  * from the newest deposit at the moment of the click, the wallet is moved to the deposit's chain
  * (and checked to have moved) first, and the transfer is dry-run before the wallet asks to sign.
  */
@@ -58,6 +81,10 @@ export function WalletPane({
   onSent,
   onReceipt,
   onUseQr,
+  payWith,
+  routes,
+  notice = null,
+  onClearNotice,
 }: {
   wallet: WalletApi;
   deposit: PayDeposit;
@@ -66,6 +93,11 @@ export function WalletPane({
   onSent: (payment: SentPayment) => void;
   onReceipt: (hash: Hex, status: "success" | "reverted") => void;
   onUseQr: () => void;
+  payWith: PayWith;
+  routes: RoutesClient | null;
+  /** What happened to the last payment (it reverted, or its route was refunded). */
+  notice?: string | null;
+  onClearNotice?: () => void;
 }) {
   const [stage, setStage] = React.useState<null | "switching" | "signing">(null);
   /** The network row's own action, and whether the wallet turned out not to have the network. */
@@ -81,6 +113,8 @@ export function WalletPane({
   const [exploring, setExploring] = React.useState(false);
   const [exploreSearch, setExploreSearch] = React.useState("");
   const exploreCount = useWalletCount(asset.verified ? asset.network.chain.id : null);
+  /** The "Pay with" list, in place of the card. */
+  const [choosing, setChoosing] = React.useState(false);
 
   if (!asset.verified) {
     return (
@@ -95,6 +129,7 @@ export function WalletPane({
   const token = asset.token;
   const shown = formatUnits(remaining.toString(), token.decimals);
   const connected = wallet.status === "connected" && Boolean(wallet.address);
+  const busy = stage !== null;
 
   const connectWith = async (option: WalletOption) => {
     const mine = ++attempt.current;
@@ -164,7 +199,9 @@ export function WalletPane({
   if (!connected) {
     return (
       <div className="space-y-2">
-        <p className="px-1 pb-1 text-[13px] text-(--pay-muted)">Pay on this page directly.</p>
+        <p className="px-1 pb-1 text-[13px] text-(--pay-muted)">
+          {payWith.available ? "Pay on this page with any token, from any network." : "Pay on this page directly."}
+        </p>
         {!wallet.optionsReady ? (
           Array.from({ length: 6 }, (_, i) => <div key={i} className="h-[52px] animate-pulse rounded-xl bg-(--pay-soft)" />)
         ) : wallet.options.length === 0 ? (
@@ -223,13 +260,114 @@ export function WalletPane({
     );
   }
 
+  const selected = payWith.selected;
+  const routing = payWith.isRoute && selected !== null;
+
+  if (choosing) {
+    return (
+      <PayWithPicker
+        payWith={payWith}
+        connected={connected}
+        onPick={(option) => {
+          payWith.select(option);
+          setChoosing(false);
+          setError(null);
+          onClearNotice?.();
+        }}
+        onBack={() => setChoosing(false)}
+      />
+    );
+  }
+
+  const header = (
+    <div className="flex h-[60px] items-center gap-3 px-3.5">
+      {wallet.walletIcon ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={wallet.walletIcon} alt="" width={30} height={30} className="size-[30px] rounded-[10px]" />
+      ) : (
+        <span className="flex size-[30px] items-center justify-center rounded-[10px] bg-(--pay-sunk)">
+          <WalletIcon className="size-4" />
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="font-mono text-[14px] leading-tight font-medium">{shortHex(wallet.address ?? "", 6, 4)}</p>
+        <p className="text-[12px] leading-tight text-(--pay-muted)">{wallet.walletName ?? "Wallet"}</p>
+      </div>
+      <button
+        type="button"
+        onClick={() => {
+          setError(null);
+          wallet.disconnect();
+        }}
+        disabled={busy}
+        className="rounded-full px-2.5 py-1 text-[12.5px] font-medium text-(--pay-muted) transition-colors hover:bg-(--pay-soft) hover:text-(--pay-ink)"
+      >
+        Disconnect
+      </button>
+    </div>
+  );
+
+  // What's being paid with. Opens the list when there's anything else to pay with.
+  const choosable = payWith.available;
+  const selectedBalance = routing ? selected.balance : wallet.tokenBalance;
+  const payWithRow = selected ? (
+    <button
+      type="button"
+      onClick={() => choosable && setChoosing(true)}
+      disabled={busy || !choosable}
+      aria-label={choosable ? `Pay with ${selected.token.symbol} on ${selected.chain.name}. Change` : undefined}
+      className={cn(
+        "group flex h-[72px] w-full items-center gap-3 border-t border-(--pay-line) px-3.5 text-left",
+        choosable && "transition-colors hover:bg-(--pay-soft) disabled:hover:bg-transparent",
+      )}
+    >
+      <OptionMark option={selected} size={34} />
+      <span className="min-w-0 flex-1">
+        <span className="block text-[11.5px] leading-tight font-medium tracking-wide text-(--pay-faint) uppercase">Pay with</span>
+        <span className="mt-0.5 block truncate text-[15px] leading-tight font-semibold">
+          {selected.token.symbol} <span className="font-normal text-(--pay-muted)">on {selected.chain.name}</span>
+        </span>
+        <span className="tabular mt-0.5 block truncate text-[12px] leading-tight text-(--pay-muted)">
+          {selectedBalance === undefined ? (
+            <span className="inline-block h-2.5 w-16 animate-pulse rounded bg-(--pay-sunk) align-middle" aria-label="loading balance" />
+          ) : (
+            <>Balance {formatBalance(selectedBalance, selected.token.decimals)}</>
+          )}
+        </span>
+      </span>
+      {choosable ? (
+        <span className="flex items-center gap-0.5 rounded-full border border-(--pay-line) px-2.5 py-1 text-[12.5px] font-medium text-(--pay-muted) transition-colors group-hover:text-(--pay-ink)">
+          Change
+          <ChevronRightIcon className="size-3.5" />
+        </span>
+      ) : null}
+    </button>
+  ) : null;
+
+  if (routing) {
+    return (
+      <RouteView
+        wallet={wallet}
+        deposit={deposit}
+        asset={asset}
+        remaining={remaining}
+        payWith={payWith}
+        routes={routes}
+        header={header}
+        payWithRow={payWithRow}
+        onSent={onSent}
+        onChoose={() => setChoosing(true)}
+        notice={notice}
+      />
+    );
+  }
+
   const onChain = wallet.chainId === target.chain.id;
   const currentChain = wallet.chainId ? (CHAIN_NAMES[wallet.chainId] ?? `chain ${wallet.chainId}`) : "an unknown network";
   const insufficient = wallet.tokenBalance !== undefined && wallet.tokenBalance < remaining;
   const noGas = wallet.nativeBalance !== undefined && wallet.nativeBalance === 0n;
   // A wallet without the network can't be switched by paying; it needs "Add" first.
   const blocked = insufficient || noGas || remaining <= 0n || (!onChain && needsAdd);
-  const busy = stage !== null;
 
   const label = (() => {
     if (stage === "switching") return `Switching to ${target.name}…`;
@@ -282,37 +420,16 @@ export function WalletPane({
     }
   }
 
+  const suggestion = insufficient ? payWith.suggestion : null;
+
   // A roomy card at the top, the Pay button pinned to the bottom of the pane.
   return (
     <div className="flex flex-1 flex-col gap-3">
       <div className="flex flex-col rounded-xl border border-(--pay-line)">
-        <div className="flex h-[104px] items-center gap-3 px-3.5">
-          {wallet.walletIcon ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={wallet.walletIcon} alt="" width={36} height={36} className="size-9 rounded-xl" />
-          ) : (
-            <span className="flex size-9 items-center justify-center rounded-xl bg-(--pay-sunk)">
-              <WalletIcon className="size-4.5" />
-            </span>
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="font-mono text-[14.5px] font-medium">{shortHex(wallet.address ?? "", 6, 4)}</p>
-            <p className="text-[12.5px] text-(--pay-muted)">{wallet.walletName ?? "Wallet"}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setError(null);
-              wallet.disconnect();
-            }}
-            disabled={busy}
-            className="rounded-full px-2.5 py-1 text-[12.5px] font-medium text-(--pay-muted) transition-colors hover:bg-(--pay-soft) hover:text-(--pay-ink)"
-          >
-            Disconnect
-          </button>
-        </div>
+        {header}
+        {payWithRow}
         <dl className="flex flex-col border-t border-(--pay-line) text-[14px]">
-          <div className="flex h-[84px] items-center justify-between gap-3 px-3.5">
+          <div className="flex h-[64px] items-center justify-between gap-3 px-3.5">
             <dt className="text-(--pay-muted)">Network</dt>
             <dd className="flex items-center gap-1.5 font-medium">
               {onChain ? (
@@ -345,17 +462,13 @@ export function WalletPane({
               )}
             </dd>
           </div>
-          <div className="flex h-[84px] items-center justify-between gap-3 border-t border-(--pay-line) px-3.5">
-            <dt className="text-(--pay-muted)">Balance</dt>
+          <div className="flex h-[64px] items-center justify-between gap-3 border-t border-(--pay-line) px-3.5">
+            <dt className="text-(--pay-muted)">You pay</dt>
             <dd className={cn("tabular flex items-center gap-1.5 font-medium", insufficient && "text-(--pay-danger)")}>
-              {wallet.tokenBalance === undefined ? (
-                <span className="h-3.5 w-20 animate-pulse rounded bg-(--pay-sunk)" aria-label="loading balance" />
-              ) : (
-                <>
-                  {formatUnits(wallet.tokenBalance.toString(), token.decimals)} {token.symbol}
-                  {!insufficient ? <CheckIcon className="size-3.5 text-(--pay-ok)" aria-label="enough" /> : null}
-                </>
-              )}
+              {shown} {token.symbol}
+              {wallet.tokenBalance !== undefined && !insufficient ? (
+                <CheckIcon className="size-3.5 text-(--pay-ok)" aria-label="balance covers it" />
+              ) : null}
             </dd>
           </div>
         </dl>
@@ -365,29 +478,47 @@ export function WalletPane({
         type="button"
         onClick={pay}
         disabled={busy || blocked}
-        className="mt-auto flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-(--pay-button) text-[15px] font-semibold text-(--pay-button-ink) transition-[transform,opacity,background-color] hover:opacity-90 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45"
+        className="mt-auto flex h-12 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-(--pay-button) text-[15px] font-semibold text-(--pay-button-ink) transition-[transform,opacity,background-color] hover:opacity-90 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45"
       >
         {busy ? <Spinner /> : null}
         {label}
       </button>
 
-      {insufficient ? (
+      {error || notice ? (
+        <p role="alert" className="px-1 text-center text-[13px] text-(--pay-danger)">
+          {error ?? notice}
+        </p>
+      ) : suggestion ? (
         <p className="px-1 text-center text-[12.5px] text-(--pay-muted)">
-          This wallet holds {formatUnits((wallet.tokenBalance ?? 0n).toString(), token.decimals)} {token.symbol} on{" "}
-          {target.name}.{" "}
-          <button type="button" onClick={onUseQr} className={INLINE_LINK}>
-            Pay from another wallet
+          Not enough {token.symbol} on {target.name}.{" "}
+          <button type="button" onClick={() => payWith.select(suggestion)} className={INLINE_LINK}>
+            Pay with {suggestion.token.symbol} on {suggestion.chain.name}
           </button>
+        </p>
+      ) : insufficient ? (
+        <p className="px-1 text-center text-[12.5px] text-(--pay-muted)">
+          This wallet holds {formatUnits((wallet.tokenBalance ?? 0n).toString(), token.decimals)} {token.symbol} on {target.name}.{" "}
+          {payWith.available ? (
+            <button type="button" onClick={() => setChoosing(true)} className={INLINE_LINK}>
+              Pay with another token
+            </button>
+          ) : (
+            <button type="button" onClick={onUseQr} className={INLINE_LINK}>
+              Pay from another wallet
+            </button>
+          )}
         </p>
       ) : noGas ? (
         <p className="px-1 text-center text-[12.5px] text-(--pay-muted)">
           Sending on {target.name} needs a little {target.nativeSymbol} for gas, and this wallet has none.
-        </p>
-      ) : null}
-
-      {error ? (
-        <p role="alert" className="px-1 text-center text-[13px] text-(--pay-danger)">
-          {error}
+          {payWith.available ? (
+            <>
+              {" "}
+              <button type="button" onClick={() => setChoosing(true)} className={INLINE_LINK}>
+                Pay from another network
+              </button>
+            </>
+          ) : null}
         </p>
       ) : null}
     </div>

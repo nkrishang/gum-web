@@ -1,4 +1,31 @@
-import { fallback, http, type Transport } from "viem";
+import { fallback, http, type Chain, type Transport } from "viem";
+import {
+  abstract,
+  apeChain,
+  avalanche,
+  berachain,
+  blast,
+  bsc,
+  celo,
+  gnosis,
+  hyperEvm,
+  ink,
+  katana,
+  linea,
+  mainnet,
+  mantle,
+  mode,
+  optimism,
+  plumeMainnet,
+  polygon,
+  scroll,
+  soneium,
+  sonic,
+  unichain,
+  worldchain,
+  zkSync,
+  zora,
+} from "viem/chains";
 import { createConfig } from "wagmi";
 import { coinbaseWallet, injected, walletConnect } from "wagmi/connectors";
 import { walletConnectProjectId } from "@/lib/env";
@@ -13,15 +40,27 @@ import { PAY_CHAINS } from "./networks";
  */
 
 // Inlined at build time, so each name is spelled out.
-const RPC_OVERRIDES: Record<number, string | undefined> = {
+export const RPC_OVERRIDES: Record<number, string | undefined> = {
   8453: process.env.NEXT_PUBLIC_RPC_URL_8453,
   42161: process.env.NEXT_PUBLIC_RPC_URL_42161,
   143: process.env.NEXT_PUBLIC_RPC_URL_143,
   5042: process.env.NEXT_PUBLIC_RPC_URL_5042,
 };
 
+/**
+ * Chains a payer may pay *from* through a Relay route, beyond the page's own. Listed so that a
+ * WalletConnect session asks the phone wallet for them too (its optional namespaces come from this
+ * config); browser wallets switch to any chain regardless. Relay routes from more than these; a
+ * phone wallet paired without a chain can still pay from the ones it has.
+ */
+const ROUTE_CHAINS: Chain[] = [
+  mainnet, optimism, bsc, polygon, avalanche, gnosis, linea, scroll, zkSync, blast, mantle, celo, zora, unichain, sonic,
+  worldchain, ink, soneium, berachain, hyperEvm, mode, abstract, katana, plumeMainnet, apeChain,
+];
+const CHAINS = [...PAY_CHAINS, ...ROUTE_CHAINS.filter((c) => !PAY_CHAINS.some((p) => p.id === c.id))] as [Chain, ...Chain[]];
+
 const transports = Object.fromEntries(
-  PAY_CHAINS.map((chain): [number, Transport] => {
+  CHAINS.map((chain): [number, Transport] => {
     const override = RPC_OVERRIDES[chain.id];
     return [chain.id, override ? fallback([http(override), http()]) : http()];
   }),
@@ -35,7 +74,7 @@ export const hasWalletConnect = walletConnectProjectId.length > 0;
 const inBrowser = typeof window !== "undefined";
 
 export const payWagmiConfig = createConfig({
-  chains: PAY_CHAINS,
+  chains: CHAINS,
   transports,
   ssr: true,
   multiInjectedProviderDiscovery: true,

@@ -3,6 +3,8 @@
 import * as React from "react";
 import type { Address, Hex } from "viem";
 import { SIM_PAYER, type Simulator } from "@/lib/pay/simulator";
+import { simBalanceOf } from "@/lib/pay/routes/sim";
+import { NATIVE } from "@/lib/pay/routes/types";
 import { popularFill } from "@/lib/pay/wallets";
 import type { WalletApi, WalletOption } from "./types";
 
@@ -149,6 +151,38 @@ export function useSimWallet(sim: Simulator): WalletApi {
     async waitForReceipt(hash) {
       await wait(Math.max(600, sim.network.blockTimeMs * 1.5));
       return reverts.current.has(hash) ? "reverted" : "success";
+    },
+    async readBalances(chain, tokens) {
+      // Each chain answers on its own time, as Relay's public RPCs do.
+      await wait(250 + Math.random() * 900);
+      if (status !== "connected") return tokens.map(() => null);
+      return tokens.map((t) => {
+        if (chain.id === target && t.address === deposit?.token_address.toLowerCase()) return tokenBalance ?? 0n;
+        if (chain.id === target && t.address === NATIVE) return nativeBalance ?? 0n;
+        return simBalanceOf(chain.id, t);
+      });
+    },
+    async executeRoute(quote, chain, onStage) {
+      if (chainId !== chain.id) {
+        onStage?.({ kind: "switching", chain: chain.name });
+        await wait(650);
+        if (behavior === "missing_chain" && !added) await wait(900);
+        setAdded(true);
+        setChainId(chain.id);
+      }
+      let hash = "" as Hex;
+      for (const [index, step] of quote.steps.entries()) {
+        onStage?.({ kind: "signing", step, index, total: quote.steps.length });
+        await wait(1_300);
+        if (behavior === "reject") throw Object.assign(new Error("User rejected the request."), { code: 4001 });
+        hash = `0x${Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, "0")).join("")}` as Hex;
+        if (index < quote.steps.length - 1) {
+          onStage?.({ kind: "confirming", step, index, total: quote.steps.length });
+          await wait(900);
+        }
+      }
+      sim.routeSent(quote.request_id, hash, BigInt(quote.destination.amount), quote.time_estimate_secs);
+      return hash;
     },
   };
 }

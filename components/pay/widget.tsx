@@ -8,6 +8,9 @@ import { formatUnits } from "@/lib/format";
 import type { DepositFeed } from "@/lib/pay/feed";
 import { formatCountdown, payModel, type PayModel } from "@/lib/pay/model";
 import { resolveAsset, type ResolvedAsset } from "@/lib/pay/networks";
+import type { RoutesClient } from "@/lib/pay/routes/client";
+import { simRoutesClient } from "@/lib/pay/routes/sim";
+import { isFinal, type RouteStatus } from "@/lib/pay/routes/types";
 import type { Simulator } from "@/lib/pay/simulator";
 import type { PayDeposit, PayStatus } from "@/lib/pay/types";
 import { cn } from "@/lib/utils";
@@ -15,6 +18,7 @@ import { ChainIcon, Notice, Spinner, TokenMark, useNow } from "./bits";
 import { AddressPane, QrPane } from "./manual";
 import { ExpiredView, NotFoundView } from "./outcomes";
 import { LifecycleView, type Clock, type ReturnTo } from "./progress";
+import { usePayWith, type PayWith } from "./use-pay-with";
 import { useSimWallet } from "./wallet/use-sim-wallet";
 import { useWagmiWallet } from "./wallet/use-wagmi-wallet";
 import type { WalletApi } from "./wallet/types";
@@ -24,6 +28,11 @@ export interface PayWidgetViewProps {
   feed: DepositFeed;
   /** Test mode: a simulated deposit and wallet. Omitted, the wallet is real (wagmi). */
   simulator?: Simulator;
+  /**
+   * Paying with any token on any chain (gum-server's Relay routes). Test mode brings its own;
+   * omitted, the page offers the requested token only.
+   */
+  routes?: RoutesClient | null;
   returnTo?: ReturnTo | null;
   theme?: "light" | "dark";
   /** "page" draws the card; "embed" fills its container, for apps hosting the widget. */
@@ -79,6 +88,7 @@ function useSentPayment(id: string | undefined, persist: boolean) {
 export function PayWidgetView({
   feed,
   simulator,
+  routes: liveRoutes = null,
   returnTo = null,
   theme = "light",
   variant = "page",
@@ -94,10 +104,12 @@ export function PayWidgetView({
   const asset = React.useMemo(() => (deposit ? resolveAsset(deposit) : null), [deposit]);
 
   const target = asset?.verified ? { chainId: asset.network.chain.id, token: asset.token.address } : null;
+  const routes = React.useMemo(() => (simulator ? simRoutesClient(simulator) : liveRoutes), [simulator, liveRoutes]);
   const inner = (
     <PayWidgetInner
       snapshot={snapshot}
       asset={asset}
+      routes={routes}
       simulated={Boolean(simulator)}
       returnTo={returnTo}
       onStatusChange={onStatusChange}
@@ -133,15 +145,58 @@ const FRAME = "h-[460px]";
 /** The tabs (44px) and their gap (16px) come out of the frame; the panes get the rest. */
 const PANE = "h-[400px]";
 
+/**
+ * A route this page sent, followed until it lands or Relay gives up on it (`onGiveUp`: refunded or
+ * failed).
+ */
+function useRouteProgress(
+  routes: RoutesClient | null,
+  sent: SentPayment | null,
+  onGiveUp: (status: "refund" | "failure", sent: SentPayment) => void,
+): RouteStatus | null {
+  const requestId = sent?.route?.requestId ?? null;
+  const [status, setStatus] = React.useState<RouteStatus | null>(null);
+  const latest = React.useRef({ sent, onGiveUp });
+  React.useEffect(() => {
+    latest.current = { sent, onGiveUp };
+  });
+  React.useEffect(() => {
+    if (!routes || !requestId) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    // Relay fills in seconds; a route still unsettled after this is left to the deposit's own feed.
+    const giveUpAt = Date.now() + 15 * 60_000;
+    const poll = async (delay: number) => {
+      const next = await routes.status(requestId).catch(() => null);
+      if (cancelled || Date.now() > giveUpAt) return;
+      if (next) setStatus(next);
+      if (next && isFinal(next.status)) {
+        const { sent, onGiveUp } = latest.current;
+        if (next.status !== "success" && sent) onGiveUp(next.status === "refund" ? "refund" : "failure", sent);
+        return;
+      }
+      timer = setTimeout(() => void poll(Math.min(delay * 1.25, 5_000)), delay);
+    };
+    void poll(1_500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [routes, requestId]);
+  return status && status.request_id === requestId ? status : null;
+}
+
 function PayWidgetInner({
   snapshot,
   asset,
+  routes,
   simulated,
   returnTo,
   onStatusChange,
 }: {
   snapshot: ReturnType<DepositFeed["getSnapshot"]>;
   asset: ResolvedAsset | null;
+  routes: RoutesClient | null;
   simulated: boolean;
   returnTo: ReturnTo | null;
   onStatusChange?: PayWidgetViewProps["onStatusChange"];
@@ -156,6 +211,26 @@ function PayWidgetInner({
   const now = useNow(open || sent !== null, 100);
   const clock: Clock = { now, offset: clockOffset, error: clockError ?? 0 };
   const model = deposit ? payModel(deposit, now + clockOffset) : null;
+  const payWith = usePayWith({
+    routes,
+    wallet,
+    deposit,
+    asset,
+    remaining: model?.remaining ?? 0n,
+    active: model?.acceptsPayment ?? false,
+    quoting: tab === "wallet" && sent === null && (model?.acceptsPayment ?? false),
+  });
+  // A route Relay gave up on: its funds go back to the payer, and the page asks for payment again.
+  const routeStatus = useRouteProgress(routes, sent, (outcome, gaveUp) => {
+    if (!gaveUp.route) return;
+    const { symbol, chainName } = gaveUp.route;
+    setSent(null);
+    setWalletNotice(
+      outcome === "refund"
+        ? `Relay couldn't complete the route and refunded your ${symbol} on ${chainName}. Nothing was paid.`
+        : `Relay couldn't complete the route, so nothing was paid. Check your ${symbol} on ${chainName} before trying again.`,
+    );
+  });
 
   // Tell whoever embeds the widget, once per status.
   const status = deposit?.status;
@@ -196,8 +271,17 @@ function PayWidgetInner({
   } else if (!deposit || !model || !asset) {
     content = <Skeleton />;
   } else {
+    // A route's fill is Relay's transaction, not the payer's: it's known by Relay's hashes, or,
+    // before Relay reports them, by a transfer of exactly the routed amount arriving after the send.
+    const fills = new Set([sent?.hash, ...(routeStatus?.tx_hashes ?? [])].filter(Boolean).map((h) => h!.toLowerCase()));
+    const sentAt = sent ? (sent.serverAt ?? sent.at + clockOffset) : 0;
     const sentIsKnown =
-      sent !== null && model.transfers.some((t) => t.tx_hash.toLowerCase() === sent.hash.toLowerCase());
+      sent !== null &&
+      model.transfers.some(
+        (t) =>
+          fills.has(t.tx_hash.toLowerCase()) ||
+          (sent.route !== undefined && t.seenAt >= sentAt && t.amountBase === BigInt(sent.amount)),
+      );
     const waitingOnSent = sent !== null && !sentIsKnown && model.acceptsPayment;
 
     let body: React.ReactNode;
@@ -210,6 +294,7 @@ function PayWidgetInner({
           model={model}
           asset={asset}
           sent={sent}
+          routeStatus={routeStatus}
           clock={clock}
           returnTo={returnTo}
           onPayAgain={() => setSent(null)}
@@ -225,10 +310,15 @@ function PayWidgetInner({
           walletNotice={walletNotice}
           onSent={onSent}
           onReceipt={onReceipt}
+          payWith={payWith}
+          routes={routes}
+          onClearNotice={() => setWalletNotice(null)}
         />
       );
     } else {
-      body = <LifecycleView deposit={deposit} model={model} asset={asset} sent={sent} clock={clock} returnTo={returnTo} />;
+      body = (
+        <LifecycleView deposit={deposit} model={model} asset={asset} sent={sent} routeStatus={routeStatus} clock={clock} returnTo={returnTo} />
+      );
     }
 
     content = (
@@ -380,6 +470,9 @@ function PayView({
   walletNotice,
   onSent,
   onReceipt,
+  payWith,
+  routes,
+  onClearNotice,
 }: {
   deposit: PayDeposit;
   model: PayModel;
@@ -390,6 +483,9 @@ function PayView({
   walletNotice: string | null;
   onSent: (payment: SentPayment) => void;
   onReceipt: (hash: Hex, status: "success" | "reverted") => void;
+  payWith: PayWith;
+  routes: RoutesClient | null;
+  onClearNotice: () => void;
 }) {
   const tabRefs = React.useRef<Record<Tab, HTMLButtonElement | null>>({ wallet: null, qr: null, address: null });
 
@@ -446,7 +542,8 @@ function PayView({
           ) : null}
           {tab === "wallet" ? (
             <>
-              {walletNotice ? (
+              {/* Connected, the pane says it under its Pay button instead, where there's room. */}
+              {walletNotice && wallet.status !== "connected" ? (
                 <Notice tone="danger" icon={<TriangleAlertIcon />} className="mb-3">
                   {walletNotice}
                 </Notice>
@@ -459,6 +556,10 @@ function PayView({
                 onSent={onSent}
                 onReceipt={onReceipt}
                 onUseQr={() => setTab("qr")}
+                payWith={payWith}
+                routes={routes}
+                notice={walletNotice}
+                onClearNotice={onClearNotice}
               />
             </>
           ) : tab === "qr" ? (

@@ -2,11 +2,14 @@
 
 import * as React from "react";
 import { ArrowLeftIcon, CheckIcon, XIcon } from "lucide-react";
+import { formatUnits } from "@/lib/format";
 import { formatDuration, formatLatency, type PayModel } from "@/lib/pay/model";
 import { explorerTx, type ResolvedAsset } from "@/lib/pay/networks";
+import { relayTxUrl, type RouteStatus } from "@/lib/pay/routes/types";
 import type { PayDeposit } from "@/lib/pay/types";
 import { cn } from "@/lib/utils";
 import { ExternalLink, INLINE_LINK } from "./bits";
+import { formatBalance } from "./pay-with";
 import type { SentPayment } from "./wallet-pane";
 
 export interface Clock {
@@ -82,13 +85,15 @@ export function ReturnButton({ returnTo }: { returnTo: ReturnTo | null }) {
  * checkpoints are there from the first moment; they fill in as Gum reports.
  *
  * Times count from the payer's send when this page sent it, otherwise from detection, which is
- * then shown as a clock time.
+ * then shown as a clock time. A payment routed through Relay (another token or chain) gets a third
+ * checkpoint in front, Route, from the payer's transaction to Relay's fill.
  */
 export function LifecycleView({
   deposit,
   model,
   asset,
   sent,
+  routeStatus = null,
   clock,
   returnTo,
   onPayAgain,
@@ -97,6 +102,8 @@ export function LifecycleView({
   model: PayModel;
   asset: ResolvedAsset;
   sent: SentPayment | null;
+  /** Relay's word on a routed payment, while it's followed. */
+  routeStatus?: RouteStatus | null;
   clock: Clock;
   returnTo: ReturnTo | null;
   /** Offered when a payment this page sent never showed up. */
@@ -110,11 +117,15 @@ export function LifecycleView({
   const settled = model.phase === "settled";
   const failed = model.phase === "failed";
   const settleAt = model.settledAt;
-  const slow = sent !== null && detectedAt === null && clock.now - sent.at > 45_000;
+  const route = sent?.route ?? null;
+  // A route has Relay's clock too: slow is well past its estimate, and never while Relay is working.
+  const slowAfter = route ? Math.max(120_000, (route.timeEstimateSecs ?? 0) * 3_000) : 45_000;
+  const slow = sent !== null && detectedAt === null && clock.now - sent.at > slowAfter;
 
-  // The payer's transaction(s): what Gum saw arrive, or what this page sent before it did.
+  // The payer's transaction(s): what Gum saw arrive, or what this page sent before it did. A route's
+  // own transaction is on another chain; it's linked from the Route checkpoint instead.
   const payments = model.transfers.filter((t) => t.orphanedAt === null).map((t) => t.tx_hash);
-  if (payments.length === 0 && sent) payments.push(sent.hash);
+  if (payments.length === 0 && sent && !route) payments.push(sent.hash);
 
   const [tone, title, subtitle]: [React.ComponentProps<typeof StatusGlyph>["tone"], string, React.ReactNode] = settled
     ? ["ok", "Payment complete", null]
@@ -127,9 +138,18 @@ export function LifecycleView({
             <strong className="font-medium text-(--pay-ink)">Don&apos;t pay again.</strong>
           </>,
         ]
-      : detectedAt === null
-        ? ["working", "Payment sent", null]
-        : ["working", "Payment detected", null];
+      : detectedAt === null && route
+        ? [
+            "working",
+            "Routing your payment",
+            <>
+              {formatBalance(route.amount, route.decimals)} {route.symbol} from {route.chainName}, arriving as{" "}
+              {formatUnits(sent!.amount, deposit.token_decimals)} {deposit.token}.
+            </>,
+          ]
+        : detectedAt === null
+          ? ["working", "Payment sent", null]
+          : ["working", "Payment detected", null];
 
   // Counted from the send, a time crosses the two clocks and is shown no finer than they agree;
   // counted from detection, both ends are Gum's and it is exact.
@@ -163,6 +183,21 @@ export function LifecycleView({
     links: deposit.tx_hash ? [{ label: "Settlement", href: explorerTx(asset.network, deposit.tx_hash) }] : [],
   };
 
+  const routeDone = routeStatus?.status === "success" || detectedAt !== null;
+  const routeCheckpoint: Checkpoint | null = route
+    ? {
+        label: "Route",
+        state: routeDone ? "done" : "active",
+        time: detectedAt !== null ? since(detectedAt) : sentAt !== null ? since(serverNow) : null,
+        links: [
+          { label: "Sent", href: route.explorer ? `${route.explorer}/tx/${sent!.hash}` : null },
+          { label: "Relay", href: relayTxUrl(route.requestId) },
+        ],
+      }
+    : null;
+  // Until Relay fills, detection waits on the route rather than ticking.
+  const detectShown: Checkpoint = route && !routeDone ? { ...detect, state: "waiting", time: null } : detect;
+
   return (
     <div className="pay-rise flex h-full flex-col">
       <div className="flex flex-1 flex-col items-center justify-center text-center">
@@ -172,8 +207,9 @@ export function LifecycleView({
         </h2>
         {subtitle ? <p className="mt-1 max-w-[320px] text-[13.5px] leading-relaxed text-(--pay-muted)">{subtitle}</p> : null}
 
-        <div className="mt-8 grid w-full grid-cols-2">
-          <CheckpointView checkpoint={detect} side="start" />
+        <div className={cn("mt-8 grid w-full", routeCheckpoint ? "grid-cols-3" : "grid-cols-2")}>
+          {routeCheckpoint ? <CheckpointView checkpoint={routeCheckpoint} side="start" /> : null}
+          <CheckpointView checkpoint={detectShown} side={routeCheckpoint ? "middle" : "start"} />
           <CheckpointView checkpoint={settle} side="end" />
         </div>
       </div>
@@ -207,20 +243,24 @@ interface Checkpoint {
  * One end of the tracker. Each half draws its half of the rail between the dots, so the pair reads
  * as one line: ink once a step has started, pale before.
  */
-function CheckpointView({ checkpoint, side }: { checkpoint: Checkpoint; side: "start" | "end" }) {
+function CheckpointView({ checkpoint, side }: { checkpoint: Checkpoint; side: "start" | "middle" | "end" }) {
   const { label, state, time, links } = checkpoint;
-  const railDone = side === "start" ? state === "done" : state !== "waiting";
+  // The rail into a checkpoint is ink once it has started; the rail out of it once it's done.
+  const rail = (half: "in" | "out") => (
+    <span
+      aria-hidden
+      className={cn(
+        "absolute top-1/2 h-0.5 -translate-y-1/2",
+        half === "out" ? "right-0 left-1/2" : "right-1/2 left-0",
+        (half === "out" ? state === "done" : state !== "waiting") ? "bg-(--pay-ink)/70" : "bg-(--pay-line)",
+      )}
+    />
+  );
   return (
     <div className="flex flex-col items-center">
       <div className="relative flex h-6 w-full items-center justify-center">
-        <span
-          aria-hidden
-          className={cn(
-            "absolute top-1/2 h-0.5 -translate-y-1/2",
-            side === "start" ? "right-0 left-1/2" : "right-1/2 left-0",
-            railDone ? "bg-(--pay-ink)/70" : "bg-(--pay-line)",
-          )}
-        />
+        {side !== "start" ? rail("in") : null}
+        {side !== "end" ? rail("out") : null}
         <Dot state={state} />
       </div>
       <p

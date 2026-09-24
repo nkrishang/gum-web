@@ -54,6 +54,7 @@ const WALLET_BEHAVIORS: { id: WalletBehavior; label: string }[] = [
   { id: "insufficient", label: "Not enough balance" },
   { id: "no_gas", label: "No gas" },
   { id: "revert", label: "Transfer reverts" },
+  { id: "route_refund", label: "Relay refunds the route" },
 ];
 
 function TestPanel({ sim }: { sim: Simulator }) {
