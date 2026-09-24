@@ -1,6 +1,6 @@
 import { fallback, http, type Transport } from "viem";
 import { createConfig } from "wagmi";
-import { injected, walletConnect } from "wagmi/connectors";
+import { coinbaseWallet, injected, walletConnect } from "wagmi/connectors";
 import { walletConnectProjectId } from "@/lib/env";
 import { PAY_CHAINS } from "./networks";
 
@@ -40,6 +40,9 @@ export const payWagmiConfig = createConfig({
   multiInjectedProviderDiscovery: true,
   connectors: [
     injected({ shimDisconnect: true }),
+    // Coinbase's SDK: its extension when installed, else a popup offering its passkey smart wallet
+    // or its app. Loaded on first use.
+    coinbaseWallet({ appName: "Gum", appLogoUrl: inBrowser ? `${window.location.origin}/icon1.png` : undefined }),
     ...(hasWalletConnect && inBrowser
       ? [
           walletConnect({

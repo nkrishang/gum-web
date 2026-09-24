@@ -16,7 +16,9 @@ export interface WalletOption {
    * "explore": every other wallet, through the WalletConnect modal's catalogue. Always last.
    */
   kind: "installed" | "popular" | "explore";
-  /** Popular wallets: the app's WalletConnect deep link. */
+  /** Popular wallets: how they connect (see lib/pay/wallets.ts). */
+  via?: "walletconnect" | "coinbase" | "handoff";
+  /** WalletConnect wallets: the app's deep link. */
   mobileLink?: string;
 }
 
@@ -41,6 +43,8 @@ export interface WalletApi {
   connect(optionId: string, onUri?: (uri: string) => void): Promise<void>;
   /** Abandons a pairing in progress. */
   cancelConnect(): void;
+  /** The payer was sent to finish in another app (a hand-off). Test mode plays the phone's part. */
+  onHandoff(optionId: string): void;
   disconnect(): void;
   switchChain(chainId: number): Promise<void>;
   /** On the payment's chain. Undefined while unknown. */

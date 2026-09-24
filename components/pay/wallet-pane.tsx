@@ -9,7 +9,7 @@ import type { PayDeposit } from "@/lib/pay/types";
 import { cn } from "@/lib/utils";
 import { ChainIcon, INLINE_LINK, Notice, Spinner } from "./bits";
 import { walletErrorMessage } from "./wallet/errors";
-import { walletDeepLink } from "@/lib/pay/wallets";
+import { phantomBrowseLink, walletDeepLink } from "@/lib/pay/wallets";
 import { QrCode } from "./qr-code";
 import type { WalletApi, WalletOption } from "./wallet/types";
 
@@ -104,14 +104,23 @@ export function WalletPane({
     const connectWith = async (option: WalletOption) => {
       const mine = ++attempt.current;
       setError(null);
-      setConnecting(option.id);
       // On a phone a popular wallet opens its app; elsewhere its QR code is scanned with one.
       const mobile = window.matchMedia("(pointer: coarse)").matches;
-      if (option.kind === "popular") setPairing({ option, uri: null, mobile });
+      if (option.via === "handoff") {
+        // Nothing connects here: the payment page opens in the wallet's own browser and is paid
+        // there, while this page follows the deposit.
+        const link = phantomBrowseLink(window.location.href);
+        wallet.onHandoff(option.id);
+        if (mobile) window.location.assign(link);
+        else setPairing({ option, uri: link, mobile });
+        return;
+      }
+      setConnecting(option.id);
+      if (option.via === "walletconnect") setPairing({ option, uri: null, mobile });
       try {
         await wallet.connect(option.id, (uri) => {
           setPairing((p) => (p && p.option.id === option.id ? { ...p, uri } : p));
-          if (mobile && option.mobileLink) window.location.href = walletDeepLink(option.mobileLink, uri);
+          if (mobile && option.mobileLink) window.location.assign(walletDeepLink(option.mobileLink, uri));
         });
         setPairing(null);
       } catch (cause) {
@@ -341,6 +350,7 @@ function PairingView({
   onBack: () => void;
 }) {
   const { option, uri, mobile } = pairing;
+  const handoff = option.via === "handoff";
   return (
     <div className="flex h-full flex-col">
       <button type="button" onClick={onBack} className={cn("flex items-center gap-1 self-start px-1 text-[13px]", INLINE_LINK)}>
@@ -369,15 +379,34 @@ function PairingView({
           <>
             <div className="rounded-2xl border border-(--pay-line) bg-white p-3">
               {uri ? (
-                <QrCode value={uri} logo={option.icon} size={212} label={`Scan with ${option.name} to connect`} />
+                <QrCode
+                  value={uri}
+                  logo={option.icon}
+                  size={212}
+                  label={handoff ? `Scan to open this payment in ${option.name}` : `Scan with ${option.name} to connect`}
+                />
               ) : (
                 <div className="size-[212px] animate-pulse rounded-lg bg-(--pay-soft)" aria-label="Preparing the code" />
               )}
             </div>
-            <p className="mt-4 text-[15px] font-semibold">Scan with {option.name}</p>
-            <p className="mt-1 text-center text-[13px] text-(--pay-muted)">
-              Open {option.name} on your phone and scan to connect.
-            </p>
+            {handoff ? (
+              <>
+                <p className="mt-4 text-[15px] font-semibold">Pay in {option.name} on your phone</p>
+                <p className="mt-1 text-center text-[13px] text-(--pay-muted)">
+                  Scan with your camera to open this payment in {option.name}. This page updates when it arrives.
+                </p>
+                <a href="https://phantom.com/download" target="_blank" rel="noreferrer" className={cn("mt-2 text-[12.5px]", INLINE_LINK)}>
+                  Or add {option.name} to this browser
+                </a>
+              </>
+            ) : (
+              <>
+                <p className="mt-4 text-[15px] font-semibold">Scan with {option.name}</p>
+                <p className="mt-1 text-center text-[13px] text-(--pay-muted)">
+                  Open {option.name} on your phone and scan to connect.
+                </p>
+              </>
+            )}
           </>
         )}
         {error ? (

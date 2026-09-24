@@ -58,6 +58,7 @@ export function useWagmiWallet(target: { chainId: number; token: Address } | nul
   });
 
   const walletConnect = connectors.find((c) => c.type === "walletConnect");
+  const coinbase = connectors.find((c) => c.type === "coinbaseWallet");
   const restoreModal = React.useRef<(() => void) | null>(null);
 
   // Detected extensions, then popular wallets to fill the list, then "Explore wallets", last.
@@ -66,7 +67,7 @@ export function useWagmiWallet(target: { chainId: number; token: Address } | nul
     const seen = new Set<string>();
     const installed: WalletOption[] = [];
     for (const c of connectors) {
-      if (c.type === "walletConnect") continue;
+      if (c.type === "walletConnect" || c.type === "coinbaseWallet") continue;
       // The generic injected connector only matters when nothing announced itself.
       if (c.id === "injected" && discovered.length > 0) continue;
       const key = c.name.toLowerCase();
@@ -74,18 +75,32 @@ export function useWagmiWallet(target: { chainId: number; token: Address } | nul
       seen.add(key);
       installed.push({ id: c.uid, name: c.id === "injected" ? "Browser wallet" : c.name, icon: c.icon, kind: "installed" });
     }
-    if (!walletConnect) return installed;
+    // wagmi folds Coinbase's extension into the SDK connector (same rdns); the extension marks
+    // itself on window, so it is still listed as detected when it's there.
+    const coinbaseExtension = typeof window !== "undefined" && "coinbaseWalletExtension" in window;
+    if (coinbase && coinbaseExtension) {
+      installed.push({ id: coinbase.uid, name: "Coinbase Wallet", icon: "/logos/coinbase.svg", kind: "installed" });
+    }
     // EIP-6963 connectors are keyed by the wallet's rdns.
-    const detected = discovered.map((c) => ({ name: c.name, rdns: c.id }));
-    const popular: WalletOption[] = popularFill(detected).map((w) => ({
-      id: `popular:${w.rdns}`,
-      name: w.name,
-      icon: w.icon,
-      kind: "popular",
-      mobileLink: w.mobileLink,
-    }));
-    return [...installed, ...popular, { id: walletConnect.uid, name: "Explore wallets", kind: "explore" }];
-  }, [connectors, walletConnect]);
+    const detected = [
+      ...discovered.map((c) => ({ name: c.name, rdns: c.id })),
+      ...(coinbaseExtension ? [{ name: "Coinbase Wallet", rdns: "com.coinbase.wallet" }] : []),
+    ];
+    const popular = popularFill(detected, (w) =>
+      w.via === "walletconnect" ? Boolean(walletConnect) : w.via === "coinbase" ? Boolean(coinbase) : true,
+    ).map(
+      (w): WalletOption => ({
+        id: w.via === "coinbase" ? coinbase!.uid : `${w.via}:${w.rdns}`,
+        name: w.name,
+        icon: w.icon,
+        kind: "popular",
+        via: w.via,
+        mobileLink: w.via === "walletconnect" ? w.mobileLink : undefined,
+      }),
+    );
+    const explore: WalletOption[] = walletConnect ? [{ id: walletConnect.uid, name: "Explore wallets", kind: "explore" }] : [];
+    return [...installed, ...popular, ...explore];
+  }, [connectors, walletConnect, coinbase]);
 
   // Through WalletConnect the connector is "WalletConnect"; the wallet the payer actually picked
   // introduces itself in the session. Keyed by connector and account so a stale name never shows.
@@ -109,7 +124,10 @@ export function useWagmiWallet(target: { chainId: number; token: Address } | nul
   }, [peerKey, connector]);
   const peerInfo = peer && peer.key === peerKey ? peer : null;
   const walletName = connector?.type === "walletConnect" ? (peerInfo?.name ?? "Wallet") : connector?.name;
-  const walletIcon = connector?.type === "walletConnect" ? peerInfo?.icon : connector?.icon;
+  const walletIcon =
+    connector?.type === "walletConnect"
+      ? peerInfo?.icon
+      : (connector?.icon ?? (connector?.type === "coinbaseWallet" ? "/logos/coinbase.svg" : undefined));
 
   const refetchToken = token.refetch;
   const refetchNative = native.refetch;
@@ -124,7 +142,7 @@ export function useWagmiWallet(target: { chainId: number; token: Address } | nul
     options: mounted ? options : [],
     optionsReady: mounted,
     async connect(optionId, onUri) {
-      if (optionId.startsWith("popular:")) {
+      if (optionId.startsWith("walletconnect:")) {
         if (!walletConnect) throw new Error("That wallet is no longer available.");
         // The same WalletConnect session, without its modal: the pane shows this wallet's own QR
         // code (or opens the app on a phone) from the pairing URI instead.
@@ -163,6 +181,8 @@ export function useWagmiWallet(target: { chainId: number; token: Address } | nul
     cancelConnect() {
       restoreModal.current?.();
     },
+    // The payer finishes in the other app; this page follows the deposit as usual.
+    onHandoff() {},
     disconnect: () => disconnect(),
     async switchChain(chainId) {
       await switchChainAsync({ chainId });

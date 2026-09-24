@@ -16,7 +16,16 @@ const OPTIONS: WalletOption[] = [
   ...popularFill([
     { name: "MetaMask", rdns: "io.metamask" },
     { name: "Rabby", rdns: "io.rabby" },
-  ]).map((w): WalletOption => ({ id: `popular:${w.rdns}`, name: w.name, icon: w.icon, kind: "popular", mobileLink: w.mobileLink })),
+  ]).map(
+    (w): WalletOption => ({
+      id: `${w.via}:${w.rdns}`,
+      name: w.name,
+      icon: w.icon,
+      kind: "popular",
+      via: w.via,
+      mobileLink: w.via === "walletconnect" ? w.mobileLink : undefined,
+    }),
+  ),
   { id: "sim-explore", name: "Explore wallets", kind: "explore" },
 ];
 
@@ -69,7 +78,7 @@ export function useSimWallet(sim: Simulator): WalletApi {
     async connect(optionId, onUri) {
       const attempt = ++pairing.current;
       setStatus("connecting");
-      if (optionId.startsWith("popular:")) {
+      if (optionId.startsWith("walletconnect:")) {
         // As if the payer scanned the code a few seconds later.
         await wait(250);
         onUri?.(fakePairingUri());
@@ -89,6 +98,13 @@ export function useSimWallet(sim: Simulator): WalletApi {
     cancelConnect() {
       pairing.current++;
       setStatus("disconnected");
+    },
+    // As if the payer opened the page in the wallet's app on their phone and paid there.
+    onHandoff() {
+      const attempt = ++pairing.current;
+      setTimeout(() => {
+        if (attempt === pairing.current) sim.sendExternal("full");
+      }, 6_000);
     },
     disconnect() {
       setStatus("disconnected");
