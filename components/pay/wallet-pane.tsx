@@ -302,12 +302,7 @@ export function WalletPane({
         <p className="px-1 text-center text-[12.5px] text-(--pay-muted)">
           Sending on {target.name} needs a little {target.nativeSymbol} for gas, and this wallet has none.
         </p>
-      ) : (
-        <p className="px-1 text-center text-[12.5px] text-(--pay-muted)">
-          Sends {shown} {token.symbol} to <span className="font-mono">{shortHex(deposit.payment_address, 6, 4)}</span> on{" "}
-          {target.name}. Nothing else.
-        </p>
-      )}
+      ) : null}
 
       {error ? (
         <p role="alert" className="px-1 text-center text-[13px] text-(--pay-danger)">

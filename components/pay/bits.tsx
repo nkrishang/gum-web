@@ -105,7 +105,10 @@ export function ExternalLink({
       href={href}
       target="_blank"
       rel="noreferrer noopener"
-      className={cn("inline-flex items-center gap-0.5 underline-offset-2 hover:underline", className)}
+      className={cn(
+        "inline-flex items-center gap-0.5 font-medium text-(--pay-brand) underline decoration-(--pay-brand)/50 underline-offset-2 transition-colors hover:decoration-(--pay-brand)",
+        className,
+      )}
     >
       {children}
       <ArrowUpRightIcon className="size-3 opacity-60" aria-hidden />

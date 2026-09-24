@@ -1,13 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { CheckIcon, XIcon } from "lucide-react";
-import { formatUnits, shortHex } from "@/lib/format";
+import { ArrowLeftIcon, CheckIcon, XIcon } from "lucide-react";
 import { formatDuration, type PayModel } from "@/lib/pay/model";
 import { explorerTx, type ResolvedAsset } from "@/lib/pay/networks";
 import type { PayDeposit } from "@/lib/pay/types";
 import { cn } from "@/lib/utils";
-import { ChainIcon, ExternalLink, INLINE_LINK } from "./bits";
+import { ExternalLink, INLINE_LINK } from "./bits";
 import type { SentPayment } from "./wallet-pane";
 
 export interface Clock {
@@ -17,173 +16,12 @@ export interface Clock {
   offset: number;
 }
 
-type RowState = "done" | "active" | "waiting" | "failed";
-
-interface Row {
-  key: string;
-  label: string;
-  state: RowState;
-  /** Server clock ms. */
-  at: number | null;
-  detail?: React.ReactNode;
+export interface ReturnTo {
+  href: string;
+  host: string;
 }
 
 const clockTime = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" });
-
-/** The rows of the lifecycle, from the payer's send (when this page sent it) to settlement. */
-export function timelineRows(args: {
-  deposit: PayDeposit;
-  model: PayModel;
-  asset: ResolvedAsset;
-  sent: SentPayment | null;
-  offset: number;
-}): { rows: Row[]; anchor: number | null } {
-  const { deposit, model, asset, sent, offset } = args;
-  const network = asset.network;
-  const rows: Row[] = [];
-  const sentAt = sent ? sent.at + offset : null;
-
-  if (sent) {
-    rows.push({
-      key: "sent",
-      label: "Sent from your wallet",
-      state: sent.reverted ? "failed" : "done",
-      at: sentAt,
-      detail: (
-        <ExternalLink href={explorerTx(network, sent.hash)} className="font-mono">
-          {shortHex(sent.hash, 8, 6)}
-        </ExternalLink>
-      ),
-    });
-  }
-
-  for (const step of model.steps) {
-    let detail: React.ReactNode = step.detail;
-    if (step.key === "detected" && model.transfers.length > 0) {
-      detail = (
-        <span className="flex flex-col gap-0.5">
-          {model.transfers.map((t) => (
-            <span key={t.key} className={cn(t.orphanedAt !== null && "line-through opacity-60")}>
-              <span className="tabular text-(--pay-ink)">
-                {formatUnits(t.amountBase.toString(), deposit.token_decimals)} {deposit.token}
-              </span>{" "}
-              from <span className="font-mono">{shortHex(t.from, 6, 4)}</span> ·{" "}
-              <ExternalLink href={explorerTx(network, t.tx_hash)} className="font-mono">
-                {shortHex(t.tx_hash, 6, 4)}
-              </ExternalLink>
-            </span>
-          ))}
-        </span>
-      );
-    }
-    if (step.key === "detected" && step.state === "active") {
-      detail = sent ? `Watching ${network?.name ?? "the chain"} for your transfer` : undefined;
-    }
-    if (step.key === "confirmed" && step.state === "active" && !step.detail) {
-      detail = `Waiting for ${network?.name ?? "the chain"} to confirm`;
-    }
-    if (step.key === "settled" && step.txHash) {
-      detail = (
-        <ExternalLink href={explorerTx(network, step.txHash)} className="font-mono">
-          {shortHex(step.txHash, 8, 6)}
-        </ExternalLink>
-      );
-    }
-    rows.push({ key: step.key, label: step.label, state: step.state, at: step.at, detail });
-  }
-
-  return { rows, anchor: sentAt ?? model.firstSeenAt };
-}
-
-export function Timeline({ rows, anchor, clock }: { rows: Row[]; anchor: number | null; clock: Clock }) {
-  const serverNow = clock.now + clock.offset;
-  return (
-    <ol className="relative">
-      {rows.map((row, i) => {
-        const last = i === rows.length - 1;
-        const delta =
-          row.at !== null && anchor !== null
-            ? row.at - anchor
-            : row.state === "active" && anchor !== null
-              ? serverNow - anchor
-              : null;
-        const isAnchor = row.at !== null && anchor !== null && Math.abs(row.at - anchor) < 1 && i === 0;
-        return (
-          <li key={row.key} className="relative flex gap-3 pb-4 last:pb-0">
-            {!last ? (
-              <span
-                aria-hidden
-                className={cn(
-                  "absolute top-5 bottom-0 left-[9px] w-px",
-                  row.state === "done" ? "bg-(--pay-ink)/70" : "bg-(--pay-line)",
-                )}
-              />
-            ) : null}
-            <StepDot state={row.state} />
-            <div className="min-w-0 flex-1 pt-px">
-              <div className="flex items-baseline justify-between gap-3">
-                <p
-                  className={cn(
-                    "text-[14px] font-medium",
-                    row.state === "waiting" && "text-(--pay-faint)",
-                    row.state === "failed" && "text-(--pay-danger)",
-                  )}
-                >
-                  {row.label}
-                </p>
-                {isAnchor && row.at !== null ? (
-                  <span className="tabular font-mono text-[12px] text-(--pay-muted)" suppressHydrationWarning>
-                    {clockTime.format(row.at - clock.offset)}
-                  </span>
-                ) : delta !== null && row.state !== "waiting" ? (
-                  <span
-                    className={cn(
-                      "tabular font-mono text-[12px]",
-                      row.state === "active" ? "text-(--pay-brand)" : "text-(--pay-muted)",
-                    )}
-                    suppressHydrationWarning
-                  >
-                    +{formatDuration(delta)}
-                  </span>
-                ) : null}
-              </div>
-              {row.detail ? <div className="mt-0.5 text-[12.5px] text-(--pay-muted)">{row.detail}</div> : null}
-            </div>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-function StepDot({ state }: { state: RowState }) {
-  if (state === "done") {
-    return (
-      <span className="pay-pop relative z-10 flex size-[19px] shrink-0 items-center justify-center rounded-full bg-(--pay-ink) text-(--pay-card)">
-        <CheckIcon className="size-3" strokeWidth={3} />
-      </span>
-    );
-  }
-  if (state === "failed") {
-    return (
-      <span className="relative z-10 flex size-[19px] shrink-0 items-center justify-center rounded-full bg-(--pay-danger) text-white">
-        <XIcon className="size-3" strokeWidth={3} />
-      </span>
-    );
-  }
-  if (state === "active") {
-    return (
-      <span className="relative z-10 flex size-[19px] shrink-0 items-center justify-center">
-        <span className="pay-ping relative size-2.5 rounded-full bg-(--pay-brand) text-(--pay-brand)" />
-      </span>
-    );
-  }
-  return (
-    <span className="relative z-10 flex size-[19px] shrink-0 items-center justify-center">
-      <span className="size-2 rounded-full border-[1.5px] border-(--pay-line) bg-(--pay-card)" />
-    </span>
-  );
-}
 
 /** The big mark at the top of a status view. */
 export function StatusGlyph({ tone }: { tone: "working" | "ok" | "warn" | "muted" }) {
@@ -223,24 +61,34 @@ export function StatusGlyph({ tone }: { tone: "working" | "ok" | "warn" | "muted
   );
 }
 
-/** "[logo] Base", inline in a sentence. */
-export function ChainName({ asset }: { asset: ResolvedAsset }) {
-  if (!asset.network) return <>{asset.verified ? "the chain" : asset.chainName}</>;
+export function ReturnButton({ returnTo }: { returnTo: ReturnTo | null }) {
+  if (!returnTo) return null;
   return (
-    <span className="inline-flex items-baseline gap-1 whitespace-nowrap">
-      <ChainIcon src={asset.network.icon} className="size-3.5 self-center" />
-      {asset.network.name}
-    </span>
+    <a
+      href={returnTo.href}
+      className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-(--pay-button) text-[15px] font-semibold text-(--pay-button-ink) transition-opacity hover:opacity-90"
+    >
+      <ArrowLeftIcon className="size-4" />
+      Back to {returnTo.host}
+    </a>
   );
 }
 
-/** Between the payer's send and the moment it is settled. */
-export function ProgressView({
+/**
+ * Everything after the payer pays, in one frame whose size never changes: a status, then two
+ * checkpoints side by side (Detect, Settle), each with its time and a link to its transaction. Both
+ * checkpoints are there from the first moment; they fill in as Gum reports.
+ *
+ * Times count from the payer's send when this page sent it, otherwise from detection, which is
+ * then shown as a clock time.
+ */
+export function LifecycleView({
   deposit,
   model,
   asset,
   sent,
   clock,
+  returnTo,
   onPayAgain,
 }: {
   deposit: PayDeposit;
@@ -248,53 +96,177 @@ export function ProgressView({
   asset: ResolvedAsset;
   sent: SentPayment | null;
   clock: Clock;
+  returnTo: ReturnTo | null;
   /** Offered when a payment this page sent never showed up. */
   onPayAgain?: () => void;
 }) {
-  const { rows, anchor } = timelineRows({ deposit, model, asset, sent, offset: clock.offset });
-  const chain = <ChainName asset={asset} />;
-  const waitingForDetection = sent !== null && model.firstSeenAt === null;
-  const slow = sent !== null && model.firstSeenAt === null && clock.now - sent.at > 45_000;
+  const serverNow = clock.now + clock.offset;
+  const sentAt = sent ? sent.at + clock.offset : null;
+  const detectedAt = model.firstSeenAt;
+  const anchor = sentAt ?? detectedAt;
+  const settled = model.phase === "settled";
+  const failed = model.phase === "failed";
+  const settleAt = model.settledAt;
+  const slow = sent !== null && detectedAt === null && clock.now - sent.at > 45_000;
 
-  const [title, subtitle]: [string, React.ReactNode] = waitingForDetection
-    ? ["Payment sent", <>Watching {chain} for it.</>]
-    : model.phase === "settling"
-      ? ["Payment confirmed", "Paying it through to the recipient."]
-      : ["Payment detected", <>Confirming on {chain}.</>];
+  // The payer's transaction(s): what Gum saw arrive, or what this page sent before it did.
+  const payments = model.transfers.filter((t) => t.orphanedAt === null).map((t) => t.tx_hash);
+  if (payments.length === 0 && sent) payments.push(sent.hash);
+
+  const [tone, title, subtitle]: [React.ComponentProps<typeof StatusGlyph>["tone"], string, React.ReactNode] = settled
+    ? ["ok", "Payment complete", "The recipient has been paid."]
+    : failed
+      ? [
+          "warn",
+          "Payment received",
+          <>
+            Passing it on hit a problem that Gum is resolving.{" "}
+            <strong className="font-medium text-(--pay-ink)">Don&apos;t pay again.</strong>
+          </>,
+        ]
+      : detectedAt === null
+        ? ["working", "Payment sent", "Waiting for it to arrive."]
+        : ["working", "Payment detected", "Settling it with the recipient."];
+
+  const detect: Checkpoint = {
+    label: "Detect",
+    state: detectedAt !== null ? "done" : "active",
+    time:
+      detectedAt !== null
+        ? sentAt !== null
+          ? `+${formatDuration(Math.max(0, detectedAt - sentAt))}`
+          : clockTime.format(detectedAt - clock.offset)
+        : sentAt !== null
+          ? `+${formatDuration(Math.max(0, serverNow - sentAt))}`
+          : null,
+    links: payments.map((hash, i) => ({
+      label: payments.length > 1 ? `Payment ${i + 1}` : "Payment",
+      href: explorerTx(asset.network, hash),
+    })),
+  };
+  const settle: Checkpoint = {
+    label: "Settle",
+    state: settled ? "done" : failed ? "failed" : detectedAt !== null ? "active" : "waiting",
+    time:
+      settleAt !== null && anchor !== null
+        ? `+${formatDuration(Math.max(0, settleAt - anchor))}`
+        : detectedAt !== null && anchor !== null && !failed
+          ? `+${formatDuration(Math.max(0, serverNow - anchor))}`
+          : null,
+    links: deposit.tx_hash ? [{ label: "Settlement", href: explorerTx(asset.network, deposit.tx_hash) }] : [],
+  };
 
   return (
-    <div className="pay-rise">
-      <div className="flex flex-col items-center text-center">
-        <StatusGlyph tone="working" />
+    <div className="pay-rise flex h-full flex-col">
+      <div className="flex flex-1 flex-col items-center justify-center text-center">
+        <StatusGlyph tone={tone} />
         <h2 className="mt-4 text-[19px] font-semibold tracking-tight" aria-live="polite">
           {title}
         </h2>
-        <p className="mt-1 text-[13.5px] text-(--pay-muted)">
-          <span className="tabular font-medium text-(--pay-ink)">
-            {formatUnits((sent && waitingForDetection ? BigInt(sent.amount) : model.received > model.amount ? model.received : model.amount).toString(), deposit.token_decimals)}{" "}
-            {deposit.token}
-          </span>
-          {" · "}
-          {subtitle}
-        </p>
-      </div>
-      <div className="mt-6 rounded-xl border border-(--pay-line) px-4 py-4">
-        <Timeline rows={rows} anchor={anchor} clock={clock} />
-      </div>
-      {slow ? (
-        <div className="mt-3 px-1 text-center text-[12.5px] text-(--pay-warn)">
-          <p>This is taking longer than usual. Check the transaction in your wallet.</p>
-          {onPayAgain ? (
-            <button type="button" onClick={onPayAgain} className={cn("mt-1", INLINE_LINK)}>
-              It failed. Let me pay again
-            </button>
-          ) : null}
+        <p className="mt-1 max-w-[320px] text-[13.5px] leading-relaxed text-(--pay-muted)">{subtitle}</p>
+
+        <div className="mt-8 grid w-full grid-cols-2">
+          <CheckpointView checkpoint={detect} side="start" />
+          <CheckpointView checkpoint={settle} side="end" />
         </div>
-      ) : !waitingForDetection ? (
-        <p className="mt-3 px-1 text-center text-[12.5px] text-(--pay-muted)">
-          You can close this page. The payment completes without it.
-        </p>
-      ) : null}
+      </div>
+
+      <div className="flex min-h-12 flex-col justify-end">
+        {slow && onPayAgain ? (
+          <p className="text-center text-[12.5px] text-(--pay-warn)">
+            Taking longer than usual. Check your wallet.{" "}
+            <button type="button" onClick={onPayAgain} className={INLINE_LINK}>
+              It failed, let me pay again
+            </button>
+          </p>
+        ) : returnTo && (settled || failed) ? (
+          <ReturnButton returnTo={returnTo} />
+        ) : !settled && !failed && detectedAt !== null ? (
+          <p className="text-center text-[12.5px] text-(--pay-muted)">You can close this page. The payment completes without it.</p>
+        ) : null}
+      </div>
     </div>
+  );
+}
+
+interface Checkpoint {
+  label: string;
+  state: "done" | "active" | "waiting" | "failed";
+  time: string | null;
+  links: { label: string; href: string | null }[];
+}
+
+/**
+ * One end of the tracker. Each half draws its half of the rail between the dots, so the pair reads
+ * as one line: ink once a step has started, pale before.
+ */
+function CheckpointView({ checkpoint, side }: { checkpoint: Checkpoint; side: "start" | "end" }) {
+  const { label, state, time, links } = checkpoint;
+  const railDone = side === "start" ? state === "done" : state !== "waiting";
+  return (
+    <div className="flex flex-col items-center">
+      <div className="relative flex h-6 w-full items-center justify-center">
+        <span
+          aria-hidden
+          className={cn(
+            "absolute top-1/2 h-0.5 -translate-y-1/2",
+            side === "start" ? "right-0 left-1/2" : "right-1/2 left-0",
+            railDone ? "bg-(--pay-ink)/70" : "bg-(--pay-line)",
+          )}
+        />
+        <Dot state={state} />
+      </div>
+      <p
+        className={cn(
+          "mt-2 text-[14px] font-medium",
+          state === "waiting" && "text-(--pay-faint)",
+          state === "failed" && "text-(--pay-danger)",
+        )}
+      >
+        {label}
+      </p>
+      <p
+        className={cn("tabular h-5 font-mono text-[12.5px]", state === "active" ? "text-(--pay-brand)" : "text-(--pay-muted)")}
+        suppressHydrationWarning
+      >
+        {time ?? (state === "failed" ? "failed" : "")}
+      </p>
+      <p className="mt-1 flex h-5 flex-wrap justify-center gap-x-2 text-[12.5px]">
+        {links.map((link) => (
+          <ExternalLink key={link.label} href={link.href}>
+            {link.label}
+          </ExternalLink>
+        ))}
+      </p>
+    </div>
+  );
+}
+
+function Dot({ state }: { state: Checkpoint["state"] }) {
+  if (state === "done") {
+    return (
+      <span className="pay-pop relative z-10 flex size-6 items-center justify-center rounded-full bg-(--pay-ink) text-(--pay-card)">
+        <CheckIcon className="size-3.5" strokeWidth={3} />
+      </span>
+    );
+  }
+  if (state === "failed") {
+    return (
+      <span className="relative z-10 flex size-6 items-center justify-center rounded-full bg-(--pay-danger) text-white">
+        <XIcon className="size-3.5" strokeWidth={3} />
+      </span>
+    );
+  }
+  if (state === "active") {
+    return (
+      <span className="relative z-10 flex size-6 items-center justify-center rounded-full bg-(--pay-card)">
+        <span className="pay-ping relative size-3 rounded-full bg-(--pay-brand) text-(--pay-brand)" />
+      </span>
+    );
+  }
+  return (
+    <span className="relative z-10 flex size-6 items-center justify-center rounded-full bg-(--pay-card)">
+      <span className="size-3 rounded-full border-2 border-(--pay-line) bg-(--pay-card)" />
+    </span>
   );
 }

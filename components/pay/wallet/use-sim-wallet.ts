@@ -11,6 +11,9 @@ const OPTIONS: WalletOption[] = [
   { id: "sim-explore", name: "Explore wallets", kind: "explore" },
 ];
 
+/** Who answers when the payer picks "Explore wallets": a phone wallet, over a simulated session. */
+const EXPLORE_PEER = { name: "Trust Wallet", icon: "/logos/trust.svg" };
+
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
@@ -34,7 +37,8 @@ export function useSimWallet(sim: Simulator): WalletApi {
   const startBalance = behavior === "insufficient" ? amount / 3n : amount * 4n + 1_234n * unit;
   const tokenBalance = status === "connected" ? (startBalance > spent ? startBalance - spent : 0n) : undefined;
   const nativeBalance = status === "connected" ? (behavior === "no_gas" ? 0n : 42_000_000_000_000_000n) : undefined;
-  const wallet = OPTIONS.find((o) => o.id === walletId);
+  const picked = OPTIONS.find((o) => o.id === walletId);
+  const wallet = picked?.kind === "explore" ? EXPLORE_PEER : picked;
 
   return {
     simulated: true,

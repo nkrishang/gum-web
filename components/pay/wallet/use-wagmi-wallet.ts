@@ -75,6 +75,30 @@ export function useWagmiWallet(target: { chainId: number; token: Address } | nul
     return out.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "installed" ? -1 : 1));
   }, [connectors]);
 
+  // Through WalletConnect the connector is "WalletConnect"; the wallet the payer actually picked
+  // introduces itself in the session. Keyed by connector and account so a stale name never shows.
+  const connector = connection.connector;
+  const peerKey = connector?.type === "walletConnect" && address ? `${connector.uid}:${address}` : null;
+  const [peer, setPeer] = React.useState<{ key: string; name?: string; icon?: string } | null>(null);
+  React.useEffect(() => {
+    if (!peerKey || !connector) return;
+    let cancelled = false;
+    void connector
+      .getProvider()
+      .then((provider) => {
+        const meta = (provider as { session?: { peer?: { metadata?: { name?: string; icons?: string[] } } } } | undefined)?.session
+          ?.peer?.metadata;
+        if (!cancelled && meta) setPeer({ key: peerKey, name: meta.name, icon: meta.icons?.[0] });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [peerKey, connector]);
+  const peerInfo = peer && peer.key === peerKey ? peer : null;
+  const walletName = connector?.type === "walletConnect" ? (peerInfo?.name ?? "Wallet") : connector?.name;
+  const walletIcon = connector?.type === "walletConnect" ? peerInfo?.icon : connector?.icon;
+
   const refetchToken = token.refetch;
   const refetchNative = native.refetch;
 
@@ -83,8 +107,8 @@ export function useWagmiWallet(target: { chainId: number; token: Address } | nul
     status: connection.status,
     address,
     chainId: connection.chainId,
-    walletName: connection.connector?.name,
-    walletIcon: connection.connector?.icon,
+    walletName,
+    walletIcon,
     options: mounted ? options : [],
     optionsReady: mounted,
     async connect(optionId) {
