@@ -53,6 +53,10 @@ export function useSimWallet(sim: Simulator): WalletApi {
   const [status, setStatus] = React.useState<WalletApi["status"]>("disconnected");
   const [walletId, setWalletId] = React.useState<string | null>(null);
   const [chainId, setChainId] = React.useState<number>(1);
+  /** "Doesn't have the network": the payment's chain is unknown to the wallet until added. */
+  const [added, setAdded] = React.useState(false);
+  const knows = (id: number) => id === 1 || behavior !== "missing_chain" || added;
+  const unknownChain = () => Object.assign(new Error("Unrecognized chain ID. Try adding the chain first."), { code: 4902 });
   const [spent, setSpent] = React.useState(0n);
   const reverts = React.useRef(new Set<Hex>());
   const pairing = React.useRef(0);
@@ -92,7 +96,7 @@ export function useSimWallet(sim: Simulator): WalletApi {
       }
       setWalletId(optionId);
       // Wallets usually come up on whatever network they were last on.
-      setChainId(behavior === "wrong_chain" ? 1 : target);
+      setChainId(behavior === "wrong_chain" || behavior === "missing_chain" ? 1 : target);
       setStatus("connected");
     },
     cancelConnect() {
@@ -112,6 +116,12 @@ export function useSimWallet(sim: Simulator): WalletApi {
     },
     async switchChain(id) {
       await wait(650);
+      if (!knows(id)) throw unknownChain();
+      setChainId(id);
+    },
+    async addChain(id) {
+      await wait(900);
+      setAdded(true);
       setChainId(id);
     },
     tokenBalance,
@@ -121,6 +131,7 @@ export function useSimWallet(sim: Simulator): WalletApi {
       if (chainId !== request.chainId) {
         onStage?.("switching");
         await wait(650);
+        if (!knows(request.chainId)) throw unknownChain();
         setChainId(request.chainId);
       }
       if ((tokenBalance ?? 0n) < request.amount) {

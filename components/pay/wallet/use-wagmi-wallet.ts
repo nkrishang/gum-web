@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { erc20Abi, type Address, type Hex } from "viem";
+import { erc20Abi, numberToHex, type Address, type EIP1193Provider, type Hex } from "viem";
 import {
   useBalance,
   useConfig,
@@ -193,6 +193,26 @@ export function useWagmiWallet(target: { chainId: number; token: Address } | nul
     onHandoff() {},
     disconnect: () => disconnect(),
     async switchChain(chainId) {
+      await switchChainAsync({ chainId });
+    },
+    async addChain(chainId) {
+      const chain = config.chains.find((c) => c.id === chainId);
+      const connector = connection.connector;
+      if (!chain || !connector) throw new Error("This network isn't available.");
+      const provider = (await connector.getProvider()) as EIP1193Provider;
+      await provider.request({
+        method: "wallet_addEthereumChain",
+        params: [
+          {
+            chainId: numberToHex(chain.id),
+            chainName: chain.name,
+            nativeCurrency: chain.nativeCurrency,
+            rpcUrls: [...chain.rpcUrls.default.http],
+            blockExplorerUrls: chain.blockExplorers ? [chain.blockExplorers.default.url] : undefined,
+          },
+        ],
+      });
+      // Most wallets switch on adding; ask anyway, so the wallet ends up where the payment is.
       await switchChainAsync({ chainId });
     },
     tokenBalance: token.data,

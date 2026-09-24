@@ -2,13 +2,13 @@
 
 import * as React from "react";
 import type { Address, Hex } from "viem";
-import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, ChevronRightIcon, TriangleAlertIcon, WalletIcon } from "lucide-react";
+import { ArrowLeftIcon, CheckIcon, ChevronRightIcon, TriangleAlertIcon, WalletIcon } from "lucide-react";
 import { formatUnits, shortHex } from "@/lib/format";
 import type { ResolvedAsset } from "@/lib/pay/networks";
 import type { PayDeposit } from "@/lib/pay/types";
 import { cn } from "@/lib/utils";
 import { ChainIcon, INLINE_LINK, Notice, Spinner } from "./bits";
-import { walletErrorMessage } from "./wallet/errors";
+import { isUnknownChain, walletErrorMessage } from "./wallet/errors";
 import { phantomBrowseLink, walletDeepLink } from "@/lib/pay/wallets";
 import { QrCode } from "./qr-code";
 import type { WalletApi, WalletOption } from "./wallet/types";
@@ -63,6 +63,9 @@ export function WalletPane({
   onUseQr: () => void;
 }) {
   const [stage, setStage] = React.useState<null | "switching" | "signing">(null);
+  /** The network row's own action, and whether the wallet turned out not to have the network. */
+  const [networkBusy, setNetworkBusy] = React.useState<null | "switching" | "adding">(null);
+  const [needsAdd, setNeedsAdd] = React.useState(false);
   const [connecting, setConnecting] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   /** A popular wallet being paired over WalletConnect: its QR code (or deep link) while we wait. */
@@ -195,7 +198,8 @@ export function WalletPane({
   const currentChain = wallet.chainId ? (CHAIN_NAMES[wallet.chainId] ?? `chain ${wallet.chainId}`) : "an unknown network";
   const insufficient = wallet.tokenBalance !== undefined && wallet.tokenBalance < remaining;
   const noGas = wallet.nativeBalance !== undefined && wallet.nativeBalance === 0n;
-  const blocked = insufficient || noGas || remaining <= 0n;
+  // A wallet without the network can't be switched by paying; it needs "Add" first.
+  const blocked = insufficient || noGas || remaining <= 0n || (!onChain && needsAdd);
   const busy = stage !== null;
 
   const label = (() => {
@@ -203,9 +207,25 @@ export function WalletPane({
     if (stage === "signing") return `Confirm in ${wallet.walletName ?? "your wallet"}…`;
     if (insufficient) return `Not enough ${token.symbol}`;
     if (noGas) return `No ${target.nativeSymbol} for gas`;
-    if (!onChain) return `Switch to ${target.name} and pay`;
     return `Pay ${shown} ${token.symbol}`;
   })();
+
+  /** Switch first; if the wallet doesn't know the network, the button becomes "Add <network>". */
+  async function switchNetwork() {
+    setError(null);
+    const adding = needsAdd;
+    setNetworkBusy(adding ? "adding" : "switching");
+    try {
+      if (adding) await wallet.addChain(target.chain.id);
+      else await wallet.switchChain(target.chain.id);
+      setNeedsAdd(false);
+    } catch (cause) {
+      if (!adding && isUnknownChain(cause)) setNeedsAdd(true);
+      else setError(walletErrorMessage(cause, "network"));
+    } finally {
+      setNetworkBusy(null);
+    }
+  }
 
   // Recreated every render, so the click always reads the newest remaining amount.
   async function pay() {
@@ -226,7 +246,8 @@ export function WalletPane({
           // No receipt yet is not a failure; Gum's detection is the source of truth.
         });
     } catch (cause) {
-      setError(walletErrorMessage(cause));
+      if (isUnknownChain(cause)) setNeedsAdd(true);
+      else setError(walletErrorMessage(cause));
     } finally {
       setStage(null);
     }
@@ -272,12 +293,26 @@ export function WalletPane({
                   <CheckIcon className="size-3.5 text-(--pay-ok)" aria-label="correct network" />
                 </>
               ) : (
-                <span className="flex items-center gap-1.5 text-(--pay-warn)">
-                  {currentChain}
-                  <ArrowRightIcon className="size-3" aria-label="switches to" />
-                  <ChainIcon src={target.icon} />
-                  {target.name}
-                </span>
+                <div className="flex flex-col items-end gap-1">
+                  <button
+                    type="button"
+                    onClick={switchNetwork}
+                    disabled={networkBusy !== null || busy}
+                    className="flex h-8 items-center gap-1.5 rounded-full bg-(--pay-button) pr-3.5 pl-2.5 text-[13px] font-semibold text-(--pay-button-ink) transition-opacity hover:opacity-90 disabled:opacity-60"
+                  >
+                    {networkBusy ? <Spinner className="size-3.5" /> : <ChainIcon src={target.icon} className="size-4 rounded-full bg-white" />}
+                    {networkBusy === "adding"
+                      ? `Adding ${target.name}…`
+                      : networkBusy === "switching"
+                        ? `Switching…`
+                        : needsAdd
+                          ? `Add ${target.name}`
+                          : `Switch to ${target.name}`}
+                  </button>
+                  <span className="text-[11.5px] font-normal text-(--pay-muted)">
+                    {needsAdd ? `Not in your wallet yet` : `Wallet is on ${currentChain}`}
+                  </span>
+                </div>
               )}
             </dd>
           </div>
@@ -296,13 +331,6 @@ export function WalletPane({
           </div>
         </dl>
       </div>
-
-      {!onChain && !busy ? (
-        <p className="px-1 text-[12.5px] text-(--pay-muted)">
-          Your wallet is on {currentChain}. It&apos;ll be asked to switch to {target.name} first. This request is only
-          paid on {target.name}.
-        </p>
-      ) : null}
 
       <button
         type="button"

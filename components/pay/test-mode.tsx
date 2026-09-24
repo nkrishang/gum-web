@@ -50,6 +50,7 @@ const WALLET_BEHAVIORS: { id: WalletBehavior; label: string }[] = [
   { id: "ok", label: "Pays normally" },
   { id: "reject", label: "User declines" },
   { id: "wrong_chain", label: "Starts on Ethereum" },
+  { id: "missing_chain", label: "Doesn't have the network" },
   { id: "insufficient", label: "Not enough balance" },
   { id: "no_gas", label: "No gas" },
   { id: "revert", label: "Transfer reverts" },

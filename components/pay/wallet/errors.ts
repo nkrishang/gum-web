@@ -2,13 +2,15 @@
  * Wallet failures arrive as provider errors, viem errors or bare objects depending on the wallet.
  * The ones a payer can act on get plain words; everything else is generic rather than a stack.
  */
-export function walletErrorMessage(error: unknown, action: "transfer" | "connect" = "transfer"): string {
+export function walletErrorMessage(error: unknown, action: "transfer" | "connect" | "network" = "transfer"): string {
   const code = readCode(error);
   const message = readMessage(error);
 
   // EIP-1193: 4001 user rejected, 4902 chain not added.
   if (code === 4001 || /user rejected|user denied|rejected the request|user cancel/i.test(message)) {
-    return action === "connect" ? "You declined the connection in your wallet." : "You declined in your wallet. Nothing was sent.";
+    if (action === "connect") return "You declined the connection in your wallet.";
+    if (action === "network") return "You declined the network change in your wallet.";
+    return "You declined in your wallet. Nothing was sent.";
   }
   if (code === 4902 || /unrecognized chain|chain .* not added|not been added/i.test(message)) {
     return "Your wallet doesn't have this network yet. Add it in your wallet, then try again.";
@@ -29,7 +31,13 @@ export function walletErrorMessage(error: unknown, action: "transfer" | "connect
     return "Your wallet didn't respond. Try again.";
   }
   if (action === "connect") return "Couldn't connect. Try again.";
+  if (action === "network") return "Couldn't change the network. Try again, or switch it in your wallet.";
   return "The transfer wasn't sent. Try again, or pay with the QR code or address.";
+}
+
+/** The wallet doesn't have the network (EIP-3326's 4902, or the words wallets use for it). */
+export function isUnknownChain(error: unknown): boolean {
+  return readCode(error) === 4902 || /unrecognized chain|unknown chain|not been added|chain .* not added|add.*chain first/i.test(readMessage(error));
 }
 
 function readCode(error: unknown): number | null {

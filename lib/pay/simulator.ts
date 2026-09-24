@@ -13,7 +13,7 @@ import type { PayDeposit, PayEvent, PayEventData, PayTransfer } from "./types";
  * waits for a button.
  */
 
-export type WalletBehavior = "ok" | "reject" | "insufficient" | "no_gas" | "wrong_chain" | "revert";
+export type WalletBehavior = "ok" | "reject" | "insufficient" | "no_gas" | "wrong_chain" | "missing_chain" | "revert";
 
 export interface SimControls {
   scenario: ScenarioId;

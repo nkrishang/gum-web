@@ -47,6 +47,8 @@ export interface WalletApi {
   onHandoff(optionId: string): void;
   disconnect(): void;
   switchChain(chainId: number): Promise<void>;
+  /** Adds the network to the wallet (EIP-3085), then switches to it. */
+  addChain(chainId: number): Promise<void>;
   /** On the payment's chain. Undefined while unknown. */
   tokenBalance?: bigint;
   nativeBalance?: bigint;
