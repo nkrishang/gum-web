@@ -14,6 +14,11 @@ export interface FeedSnapshot {
   connection: FeedConnection;
   /** server clock − client clock, ms. Add it to `Date.now()` to read the server's clock. */
   clockOffset: number;
+  /**
+   * How far off `clockOffset` can be, ms: half the round trip it was measured over. Null until
+   * measured. A latency across the two clocks smaller than this can't honestly be told apart.
+   */
+  clockError: number | null;
 }
 
 export interface DepositFeed {
@@ -32,7 +37,10 @@ export class FeedStore {
       deposit: initial,
       notFound: false,
       connection: initial ? "live" : "connecting",
-      clockOffset: initial ? offsetFrom(initial, Date.now()) : 0,
+      // Not from `initial`: it was fetched while the page rendered on the server, so its
+      // server_time is behind by however long the page took to arrive. The feed measures.
+      clockOffset: 0,
+      clockError: null,
     };
   }
 
@@ -50,19 +58,17 @@ export class FeedStore {
     for (const l of this.listeners) l();
   }
 
-  /** Take a fresh deposit. Returns whether anything changed. */
-  protected accept(next: PayDeposit, clockOffset?: number): boolean {
+  /** Take a fresh deposit, and a better clock measurement if there is one. Returns whether anything changed. */
+  protected accept(next: PayDeposit, clock?: { offset: number; error: number }): boolean {
     const prev = this.snapshot.deposit;
     const changed = !prev || prev.sequence !== next.sequence || prev.status !== next.status;
-    this.set({ deposit: next, notFound: false, ...(clockOffset !== undefined ? { clockOffset } : {}) });
+    this.set({
+      deposit: next,
+      notFound: false,
+      ...(clock ? { clockOffset: clock.offset, clockError: clock.error } : {}),
+    });
     return changed;
   }
-}
-
-/** server_time − the client's clock when the response arrived. Good to a one-way trip. */
-function offsetFrom(deposit: PayDeposit, receivedAt: number): number {
-  const server = parseTime(deposit.server_time);
-  return server === null ? 0 : server - receivedAt;
 }
 
 const WAIT_SECS = 25;
@@ -82,8 +88,8 @@ export class LiveFeed extends FeedStore implements DepositFeed {
   private generation = 0;
   private controller: AbortController | null = null;
   private wake: (() => void) | null = null;
-  /** Best one-way estimate, from the fastest immediate answer seen. */
-  private oneWayMs = 0;
+  /** The fastest round trip of a request the server answered at once: the clock's best measurement. */
+  private bestRtt: number | null = null;
 
   constructor(
     private id: string,
@@ -137,7 +143,10 @@ export class LiveFeed extends FeedStore implements DepositFeed {
     while (live()) {
       const current = this.snapshot.deposit;
       const params = new URLSearchParams();
-      if (current) {
+      // The first request is answered at once, whatever the page already has: it refreshes the
+      // server-rendered deposit and measures the clock over a round trip with no hold in it.
+      const holding = current !== null && this.bestRtt !== null;
+      if (holding) {
         params.set("after", String(current.sequence));
         params.set("wait", String(WAIT_SECS));
       }
@@ -164,11 +173,18 @@ export class LiveFeed extends FeedStore implements DepositFeed {
         const next = (await res.json()) as PayDeposit;
         if (!live()) return;
         const receivedAt = Date.now();
-        if (!current) this.oneWayMs = elapsed / 2;
-        else if (elapsed < 2 * this.oneWayMs || this.oneWayMs === 0) this.oneWayMs = elapsed / 2;
+        // NTP's rule, simplified: the server stamped server_time about half a round trip before
+        // the answer arrived. Only answers that weren't held measure a round trip, and only a
+        // faster one than before improves the estimate. A held answer's round trip includes the
+        // hold, and re-estimating from every answer would make the clock, and every latency
+        // read across it, jitter.
         const server = parseTime(next.server_time);
-        const offset = server === null ? undefined : server - (receivedAt - this.oneWayMs);
-        const changed = this.accept(next, offset);
+        let clock: { offset: number; error: number } | undefined;
+        if (!holding && (this.bestRtt === null || elapsed < this.bestRtt)) {
+          this.bestRtt = elapsed;
+          if (server !== null) clock = { offset: server - (receivedAt - elapsed / 2), error: elapsed / 2 };
+        }
+        const changed = this.accept(next, clock);
         if (this.snapshot.connection !== "live") this.set({ connection: "live" });
         backoff = 0;
         failures = 0;

@@ -147,14 +147,14 @@ function PayWidgetInner({
   onStatusChange?: PayWidgetViewProps["onStatusChange"];
 }) {
   const wallet = React.useContext(WalletContext)!;
-  const { deposit, notFound, clockOffset, connection } = snapshot;
+  const { deposit, notFound, clockOffset, clockError, connection } = snapshot;
   const [sent, setSent] = useSentPayment(deposit?.id, !simulated);
   const [tab, setTab] = React.useState<Tab>("wallet");
   const [walletNotice, setWalletNotice] = React.useState<string | null>(null);
 
   const open = deposit ? deposit.status === "pending" || deposit.status === "partial_paid" || deposit.status === "paid" : false;
   const now = useNow(open || sent !== null, 100);
-  const clock: Clock = { now, offset: clockOffset };
+  const clock: Clock = { now, offset: clockOffset, error: clockError ?? 0 };
   const model = deposit ? payModel(deposit, now + clockOffset) : null;
 
   // Tell whoever embeds the widget, once per status.
@@ -172,9 +172,9 @@ function PayWidgetInner({
   const onSent = React.useCallback(
     (payment: SentPayment) => {
       setWalletNotice(null);
-      setSent(payment);
+      setSent({ ...payment, serverAt: payment.at + clockOffset });
     },
-    [setSent],
+    [setSent, clockOffset],
   );
 
   const onReceipt = React.useCallback(

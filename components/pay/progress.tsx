@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { ArrowLeftIcon, CheckIcon, XIcon } from "lucide-react";
-import { formatDuration, type PayModel } from "@/lib/pay/model";
+import { formatDuration, formatLatency, type PayModel } from "@/lib/pay/model";
 import { explorerTx, type ResolvedAsset } from "@/lib/pay/networks";
 import type { PayDeposit } from "@/lib/pay/types";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,8 @@ export interface Clock {
   now: number;
   /** server − client, ms. */
   offset: number;
+  /** How far `offset` can be off, ms. */
+  error: number;
 }
 
 export interface ReturnTo {
@@ -101,7 +103,8 @@ export function LifecycleView({
   onPayAgain?: () => void;
 }) {
   const serverNow = clock.now + clock.offset;
-  const sentAt = sent ? sent.at + clock.offset : null;
+  // Frozen at the send; the fallback covers a payment remembered from before this was recorded.
+  const sentAt = sent ? (sent.serverAt ?? sent.at + clock.offset) : null;
   const detectedAt = model.firstSeenAt;
   const anchor = sentAt ?? detectedAt;
   const settled = model.phase === "settled";
@@ -128,16 +131,20 @@ export function LifecycleView({
         ? ["working", "Payment sent", null]
         : ["working", "Payment detected", null];
 
+  // Counted from the send, a time crosses the two clocks and is shown no finer than they agree;
+  // counted from detection, both ends are Gum's and it is exact.
+  const since = (at: number) =>
+    sentAt !== null ? formatLatency(at - sentAt, clock.error) : `+${formatDuration(Math.max(0, at - (anchor ?? at)))}`;
   const detect: Checkpoint = {
     label: "Detect",
     state: detectedAt !== null ? "done" : "active",
     time:
       detectedAt !== null
         ? sentAt !== null
-          ? `+${formatDuration(Math.max(0, detectedAt - sentAt))}`
+          ? since(detectedAt)
           : clockTime.format(detectedAt - clock.offset)
         : sentAt !== null
-          ? `+${formatDuration(Math.max(0, serverNow - sentAt))}`
+          ? since(serverNow)
           : null,
     links: payments.map((hash, i) => ({
       label: payments.length > 1 ? `Payment ${i + 1}` : "Payment",
@@ -149,9 +156,9 @@ export function LifecycleView({
     state: settled ? "done" : failed ? "failed" : detectedAt !== null ? "active" : "waiting",
     time:
       settleAt !== null && anchor !== null
-        ? `+${formatDuration(Math.max(0, settleAt - anchor))}`
+        ? since(settleAt)
         : detectedAt !== null && anchor !== null && !failed
-          ? `+${formatDuration(Math.max(0, serverNow - anchor))}`
+          ? since(serverNow)
           : null,
     links: deposit.tx_hash ? [{ label: "Settlement", href: explorerTx(asset.network, deposit.tx_hash) }] : [],
   };

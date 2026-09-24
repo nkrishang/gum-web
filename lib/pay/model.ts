@@ -222,6 +222,16 @@ export function formatDuration(msValue: number): string {
   return `${m}m ${String(s).padStart(2, "0")}s`;
 }
 
+/**
+ * A latency measured across two clocks (the payer's send against Gum's record), shown no finer
+ * than the clocks agree: inside the error it reads "<30ms" rather than a precise-looking guess.
+ */
+export function formatLatency(msValue: number, clockError: number): string {
+  const floor = Math.max(10, Math.ceil(clockError / 10) * 10);
+  if (msValue < floor) return `<${floor}ms`;
+  return `+${formatDuration(msValue)}`;
+}
+
 /** "14:32", "1:02:09", "3d 4h". */
 export function formatCountdown(msLeft: number): string {
   const total = Math.max(0, Math.floor(msLeft / 1_000));

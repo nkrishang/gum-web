@@ -33,6 +33,11 @@ export interface SentPayment {
   hash: Hex;
   /** Client clock, ms. */
   at: number;
+  /**
+   * The same moment on the server's clock, converted once when it happened, so later clock
+   * measurements can't move the latencies counted from it.
+   */
+  serverAt?: number;
   amount: string;
   from?: string;
   reverted?: boolean;

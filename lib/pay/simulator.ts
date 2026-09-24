@@ -124,7 +124,7 @@ export class Simulator extends FeedStore implements DepositFeed {
       if (this.pending) {
         const next = this.pending;
         this.pending = null;
-        this.accept(next, 0);
+        this.accept(next);
       }
     } else if (!wasOffline && this.controls.offline) {
       this.set({ connection: "reconnecting" });
@@ -162,7 +162,7 @@ export class Simulator extends FeedStore implements DepositFeed {
     this.clearTimers();
     this.pending = null;
     this.setControls({ scenario, offline: false, queued: 0 });
-    this.set({ notFound: false, connection: "live", clockOffset: 0 });
+    this.set({ notFound: false, connection: "live", clockOffset: 0, clockError: 0 });
 
     if (scenario === "not_found") {
       this.set({ deposit: null, notFound: true, connection: "closed" });
@@ -454,7 +454,7 @@ export class Simulator extends FeedStore implements DepositFeed {
       this.pending = stamped;
       return;
     }
-    this.accept(stamped, 0);
+    this.accept(stamped);
   }
 }
 
