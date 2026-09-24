@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import type { Address, Hex } from "viem";
-import { CheckIcon, ClockIcon, CopyIcon, QrCodeIcon, TriangleAlertIcon, WalletIcon } from "lucide-react";
+import { ClockIcon, CopyIcon, QrCodeIcon, TriangleAlertIcon, WalletIcon } from "lucide-react";
 import { GumMark } from "@/components/brand/logo";
 import { formatUnits } from "@/lib/format";
 import type { DepositFeed } from "@/lib/pay/feed";
@@ -295,20 +295,6 @@ function Countdown({ msLeft }: { msLeft: number }) {
   );
 }
 
-function StatusChip({ tone, children }: { tone: "ok" | "muted"; children: React.ReactNode }) {
-  return (
-    <span
-      className={cn(
-        "pay-pop inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium",
-        tone === "ok" ? "bg-(--pay-ok-soft) text-(--pay-ok)" : "bg-(--pay-soft) text-(--pay-muted)",
-      )}
-    >
-      {tone === "ok" ? <CheckIcon className="size-3.5" aria-hidden /> : null}
-      {children}
-    </span>
-  );
-}
-
 /**
  * Amount, network and clock: the same three lines in every state. While a request is part paid
  * the amount is what's left, the line under it says how much came in, and the rule under the
@@ -336,10 +322,8 @@ function AmountHeader({
   const pct = model.amount > 0n ? Math.min(100, Number((model.received * 1000n) / model.amount) / 10) : 0;
   const filled = model.phase === "settled" ? 100 : pct;
 
-  let slot: React.ReactNode = null;
-  if (model.acceptsPayment && paying) slot = <Countdown msLeft={msLeft} />;
-  else if (model.phase === "settled") slot = <StatusChip tone="ok">Paid</StatusChip>;
-  else if (model.phase === "expired") slot = <StatusChip tone="muted">Expired</StatusChip>;
+  // Only the clock lives here; outcomes are said once, in the frame below.
+  const slot = model.acceptsPayment && paying ? <Countdown msLeft={msLeft} /> : null;
 
   return (
     <div className={cn("flex flex-col", HEADER)}>
