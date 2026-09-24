@@ -232,11 +232,11 @@ export function WalletPane({
     }
   }
 
-  // The card fills the pane, its rows sharing the height; the Pay button sits at the bottom.
+  // A roomy card at the top, the Pay button pinned to the bottom of the pane.
   return (
     <div className="flex flex-1 flex-col gap-3">
-      <div className="flex flex-1 flex-col rounded-xl border border-(--pay-line)">
-        <div className="flex min-h-[64px] flex-[1.3] items-center gap-3 px-3.5 py-3">
+      <div className="flex flex-col rounded-xl border border-(--pay-line)">
+        <div className="flex h-[84px] items-center gap-3 px-3.5">
           {wallet.walletIcon ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={wallet.walletIcon} alt="" width={36} height={36} className="size-9 rounded-xl" />
@@ -261,8 +261,8 @@ export function WalletPane({
             Disconnect
           </button>
         </div>
-        <dl className="flex flex-[2] flex-col border-t border-(--pay-line) text-[14px]">
-          <div className="flex min-h-[48px] flex-1 items-center justify-between gap-3 px-3.5 py-2.5">
+        <dl className="flex flex-col border-t border-(--pay-line) text-[14px]">
+          <div className="flex h-16 items-center justify-between gap-3 px-3.5">
             <dt className="text-(--pay-muted)">Network</dt>
             <dd className="flex items-center gap-1.5 font-medium">
               {onChain ? (
@@ -281,7 +281,7 @@ export function WalletPane({
               )}
             </dd>
           </div>
-          <div className="flex min-h-[48px] flex-1 items-center justify-between gap-3 border-t border-(--pay-line) px-3.5 py-2.5">
+          <div className="flex h-16 items-center justify-between gap-3 border-t border-(--pay-line) px-3.5">
             <dt className="text-(--pay-muted)">Balance</dt>
             <dd className={cn("tabular flex items-center gap-1.5 font-medium", insufficient && "text-(--pay-danger)")}>
               {wallet.tokenBalance === undefined ? (
@@ -308,7 +308,7 @@ export function WalletPane({
         type="button"
         onClick={pay}
         disabled={busy || blocked}
-        className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-(--pay-button) text-[15px] font-semibold text-(--pay-button-ink) transition-[transform,opacity,background-color] hover:opacity-90 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45"
+        className="mt-auto flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-(--pay-button) text-[15px] font-semibold text-(--pay-button-ink) transition-[transform,opacity,background-color] hover:opacity-90 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45"
       >
         {busy ? <Spinner /> : null}
         {label}
