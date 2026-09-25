@@ -14,13 +14,14 @@ const USDC: Omit<SourceToken, "address"> = { symbol: "USDC", name: "USD Coin", d
 const USDT: Omit<SourceToken, "address"> = { symbol: "USDT", name: "Tether USD", decimals: 6, logo_uri: "/payment-icons/usdt.svg" };
 const ETH: SourceToken = { address: NATIVE, symbol: "ETH", name: "Ether", decimals: 18, logo_uri: ICON(1) };
 
-const chain = (id: number, name: string, native: SourceToken, tokens: SourceToken[], icon = ICON(id)): SourceChain => ({
+const chain = (id: number, name: string, native: SourceToken, tokens: SourceToken[], icon = ICON(id), nativePayable = true): SourceChain => ({
   id,
   name,
   icon_url: icon,
   explorer_url: "https://example.invalid",
   rpc_url: "https://example.invalid",
   native,
+  native_payable: nativePayable,
   tokens,
 });
 
@@ -29,21 +30,16 @@ const OTHER_CHAINS: SourceChain[] = [
     { ...USDC, address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" },
     { ...USDT, address: "0xdac17f958d2ee523a2206206994597c13d831ec7" },
   ], "/logos/ethereum.svg"),
-  chain(42161, "Arbitrum", ETH, [
-    { ...USDC, address: "0xaf88d065e77c8cc2239327c5edb3a432268e5831" },
-    { symbol: "ARB", name: "Arbitrum", decimals: 18, address: "0x912ce59144191c1204e64559fe8253a0e49e6548", logo_uri: "/logos/arbitrum.svg" },
-  ], "/logos/arbitrum.svg"),
+  chain(42161, "Arbitrum", ETH, [{ ...USDC, address: "0xaf88d065e77c8cc2239327c5edb3a432268e5831" }], "/logos/arbitrum.svg"),
   chain(10, "Optimism", ETH, [{ ...USDT, address: "0x94b008aa00579c1307b0ef2c499ad98a8ce58e58" }]),
   chain(137, "Polygon", { address: NATIVE, symbol: "POL", name: "Polygon", decimals: 18, logo_uri: "/logos/polygon.svg" }, [
     { ...USDC, address: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359" },
-  ], "/logos/polygon.svg"),
-  chain(8453, "Base", ETH, [
-    { ...USDC, address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913" },
-    { symbol: "DEGEN", name: "Degen", decimals: 18, address: "0x4ed4e862860bed51a9570b96d89af5e1b0efefed" },
-  ], "/logos/base.svg"),
+  // POL is a two-step route at Relay (swapped to USDC first): read for gas, never listed.
+  ], "/logos/polygon.svg", false),
+  chain(8453, "Base", ETH, [{ ...USDC, address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913" }], "/logos/base.svg"),
 ];
 
-const PRICES: Record<string, number> = { USDC: 1, USDT: 1, AUSD: 1, ETH: 2_650, POL: 0.21, MON: 0.05, ARB: 0.42, DEGEN: 0.003 };
+const PRICES: Record<string, number> = { USDC: 1, USDT: 1, AUSD: 1, ETH: 2_650, POL: 0.21, MON: 0.05 };
 
 /** What the simulated wallet holds, by chain and symbol, in whole units. */
 export const SIM_HOLDINGS: Record<string, number> = {
@@ -51,11 +47,9 @@ export const SIM_HOLDINGS: Record<string, number> = {
   "1:USDC": 45.1,
   "42161:USDC": 820.55,
   "42161:ETH": 0.018,
-  "42161:ARB": 60,
   "10:USDT": 1_210,
   "10:ETH": 0.004,
   "137:POL": 34.2,
-  "8453:DEGEN": 125_000,
   "8453:ETH": 0.03,
 };
 
@@ -119,7 +113,6 @@ export function simRoutesClient(sim: Simulator): RoutesClient {
       const found = find(origin_chain_id, origin_currency);
       const d = sim.getSnapshot().deposit;
       if (!found || !d) throw new RouteError("unsupported_chain", "Relay does not route from this chain", 400);
-      if (found.token.symbol === "DEGEN") throw new RouteError("no_route", "no route from that token right now; try another", 422);
       const price = PRICES[found.token.symbol] ?? 1;
       const usdOut = Number(amount) / 10 ** d.token_decimals;
       const feeUsd = 0.02 + usdOut * 0.001;
