@@ -77,6 +77,18 @@ export interface PayWith {
 /** A quote older than this is fetched again before it's paid, and refreshed while it's shown. */
 export const QUOTE_TTL_MS = 30_000;
 const SCAN_CONCURRENCY = 8;
+/**
+ * A balance no wallet can hold: more than a quadrillion whole tokens, or more than $100B. Some
+ * chains answer `eth_getBalance` with a placeholder rather than a balance (Tempo has no native coin
+ * and reports the same ~4e57 for every address), so a reading like that is not a balance and is
+ * dropped, whatever the chain.
+ */
+const MAX_UNITS = 10n ** 15n;
+const MAX_USD = 1e11;
+function plausible(balance: bigint, decimals: number): boolean {
+  return balance <= MAX_UNITS * 10n ** BigInt(decimals);
+}
+
 const STABLES = new Set(["USDC", "USDT", "USDT0", "AUSD", "DAI", "USDE", "USDS", "PYUSD", "FDUSD", "USDC.E", "USD₮0"]);
 
 function tokensOf(c: SourceChain): { token: SourceToken; native: boolean }[] {
@@ -184,7 +196,11 @@ export function usePayWith({
         const list = tokensOf(c);
         const got = await walletRef.current.readBalances(c, list.map((t) => t.token)).catch(() => list.map(() => null));
         if (cancelled) return;
-        const read = list.flatMap(({ token }, i) => (got[i] === null || got[i] === undefined ? [] : [[assetKey(c.id, token.address), got[i]!] as const]));
+        const read = list.flatMap(({ token }, i) => {
+          const balance = got[i];
+          if (balance === null || balance === undefined || !plausible(balance, token.decimals)) return [];
+          return [[assetKey(c.id, token.address), balance] as const];
+        });
         for (const [key, balance] of read) if (balance > 0n) held.push(key);
         setBalances((prev) => (prev.owner === owner ? { owner, map: new Map([...prev.map, ...read]) } : prev));
         // The native balance pays for gas, even where it isn't listed (Arc).
@@ -271,7 +287,9 @@ export function usePayWith({
         const key = assetKey(c.id, token.address);
         const balance = scanned.get(key);
         if (key === requested.key || !balance || balance === 0n) continue;
-        held.push(optionOf(c, token, native, balance));
+        const option = optionOf(c, token, native, balance);
+        if (option.usd !== null && option.usd > MAX_USD) continue;
+        held.push(option);
       }
     }
     if (extra && extra.key !== requested.key && !held.some((o) => o.key === extra.key)) {
@@ -385,7 +403,9 @@ export function usePayWith({
           tokens.forEach((t, i) => {
             const token: SourceToken = { address: t.address, symbol: t.symbol, name: t.name, decimals: t.decimals, logo_uri: t.logo_uri };
             const key = assetKey(chainId, t.address);
-            out.push(key === requested.key ? requested : optionOf(c, token, t.address === NATIVE, got[i] ?? undefined));
+            const balance = got[i] ?? undefined;
+            if (balance !== undefined && !plausible(balance, t.decimals)) return;
+            out.push(key === requested.key ? requested : optionOf(c, token, t.address === NATIVE, balance));
           });
         }),
       );
