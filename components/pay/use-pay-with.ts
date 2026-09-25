@@ -286,12 +286,17 @@ export function usePayWith({
 
   // ---- selection --------------------------------------------------------------------------------
   const [selectedKey, setSelectedKey] = React.useState<string | null>(null);
-  const selected = options.find((o) => o.key === selectedKey) ?? requested;
+  // Until the payer picks, the requested token, unless the wallet can't cover it and the scan found
+  // something that can: then that, with the requested token still first in the list.
+  const suggestion =
+    requested && requested.covers === false ? (options.find((o) => !o.requested && o.covers === true) ?? null) : null;
+  const fallback = suggestion && scan === null ? suggestion : requested;
+  const selected = options.find((o) => o.key === selectedKey) ?? fallback;
   const isRoute = Boolean(selected && !selected.requested && sources.status === "ready");
   const select = React.useCallback(
     (option: PayOption) => {
       if (!option.requested && !options.some((o) => o.key === option.key)) setExtra(option);
-      setSelectedKey(option.requested ? null : option.key);
+      setSelectedKey(option.key);
     },
     [options],
   );
@@ -389,9 +394,6 @@ export function usePayWith({
     },
     [routes, requested, chains, address, optionOf, priceMissing],
   );
-
-  const suggestion =
-    requested && requested.covers === false ? (options.find((o) => !o.requested && o.covers === true) ?? null) : null;
 
   return {
     available: sources.status === "ready",
