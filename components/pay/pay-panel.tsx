@@ -267,7 +267,6 @@ export function PayPanel({
           quote={quote}
           quoteError={quoteError}
           symbol={selected.token.symbol}
-          destination={network.name}
           busy={busy}
           onRefresh={() => void payWith.refreshQuote()}
         />
@@ -366,10 +365,17 @@ function Choice({
   } else if (quote && quote.status === "loading") {
     cost = <span className="inline-block h-3.5 w-14 animate-pulse rounded bg-(--pay-sunk) align-middle" aria-label="getting a quote" />;
   } else if (option.price) {
-    // Roughly what Relay charges on top (a few cents and about a tenth of a percent, per its
+    // Roughly what Relay charges on top (two cents and about a tenth of a percent, per its
     // quotes); the quote replaces it the moment this is picked.
-    const units = (owedUsd * 1.001 + 0.03) / option.price;
-    cost = `≈${units < 0.001 ? units.toPrecision(2) : units.toLocaleString("en-US", { maximumSignificantDigits: 4 })}`;
+    const units = (owedUsd * 1.001 + 0.02) / option.price;
+    cost = (
+      <>
+        <span className="mr-px font-normal text-(--pay-faint)" aria-label="about">
+          ≈
+        </span>
+        {units < 0.001 ? units.toPrecision(2) : units.toLocaleString("en-US", { maximumSignificantDigits: 4 })}
+      </>
+    );
   } else {
     cost = "—";
   }
@@ -383,9 +389,7 @@ function Choice({
       disabled={disabled && !selected}
       className={cn(
         "flex h-[54px] w-full items-center gap-3 rounded-xl border px-3 text-left transition-[border-color,background-color,box-shadow]",
-        selected
-          ? "border-(--pay-ink) bg-(--pay-card) shadow-[0_0_0_1px_var(--pay-ink)]"
-          : "border-(--pay-line) hover:border-(--pay-ink)/30 hover:bg-(--pay-soft)",
+        selected ? "border-(--pay-brand) bg-(--pay-brand-soft)" : "border-(--pay-line) hover:border-(--pay-ink)/30 hover:bg-(--pay-soft)",
         disabled && !selected && "opacity-50",
       )}
     >
@@ -411,14 +415,16 @@ function Choice({
   );
 }
 
-/** One line: what the selection costs beyond the amount, how long it takes, and the guarantee. */
+/**
+ * One line under a route: when it lands and what happens if it doesn't. No fee: the row's amount
+ * is everything that leaves the wallet, Relay's fee included. A direct transfer needs no line.
+ */
 function Terms({
   routing,
   status,
   quote,
   quoteError,
   symbol,
-  destination,
   busy,
   onRefresh,
 }: {
@@ -427,23 +433,22 @@ function Terms({
   quote?: RouteQuote;
   quoteError?: RouteError;
   symbol: string;
-  destination: string;
   busy: boolean;
   onRefresh: () => void;
 }) {
   const line = "flex min-h-5 items-center justify-center gap-1.5 px-1 text-center text-[12.5px] text-(--pay-muted)";
-  if (!routing) return <p className={line}>Sent straight to this payment on {destination}. No fees.</p>;
+  if (!routing) return null;
   if (status === "error") return <p className={cn(line, "text-(--pay-danger)")}>{routeErrorCopy(quoteError, symbol)}</p>;
-  if (!quote) return <p className={line}>Finding the best route to {destination}…</p>;
-  const fee = formatUsd(Number(quote.fees.route_usd ?? "0")) ?? "$0.00";
+  if (!quote) return <p className={line}>Finding a route…</p>;
   const eta = quote.time_estimate_secs !== undefined ? formatEta(quote.time_estimate_secs) : null;
   return (
     <p className={line}>
       <span>
-        {fee} fee{eta ? ` · arrives in ${eta}` : ""} · refunded if it fails ·{" "}
+        {eta ? `Arrives in ${eta} via ` : "Via "}
         <a href="https://relay.link" target="_blank" rel="noreferrer" className="underline decoration-(--pay-faint)/70 underline-offset-2 hover:text-(--pay-ink)">
           Relay
         </a>
+        . Refunded if it fails.
       </span>
       <button
         type="button"
