@@ -27,6 +27,11 @@ export interface SourceChain {
   native: SourceToken;
   /** An ERC-20 that is the same balance as the native currency (Arc's USDC): listed instead of it. */
   native_alias?: string;
+  /**
+   * The native currency is one of the tokens a payer can pay with here (Relay takes it as it is).
+   * When false it is still read, for gas, but not listed.
+   */
+  native_payable: boolean;
   tokens: SourceToken[];
 }
 

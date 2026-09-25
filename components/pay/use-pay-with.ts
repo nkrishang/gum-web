@@ -91,8 +91,13 @@ function plausible(balance: bigint, decimals: number): boolean {
 
 const STABLES = new Set(["USDC", "USDT", "USDT0", "AUSD", "DAI", "USDE", "USDS", "PYUSD", "FDUSD", "USDC.E", "USD₮0"]);
 
+/** The chain's native currency is listed: payable, and not the same balance as a listed ERC-20 (Arc). */
+function listsNative(c: SourceChain): boolean {
+  return c.native_payable && !c.native_alias;
+}
+
 function tokensOf(c: SourceChain): { token: SourceToken; native: boolean }[] {
-  const out = c.native_alias ? [] : [{ token: c.native, native: true }];
+  const out = listsNative(c) ? [{ token: c.native, native: true }] : [];
   const seen = new Set(out.map((t) => t.token.address));
   for (const t of c.tokens) {
     if (seen.has(t.address)) continue;
@@ -203,8 +208,9 @@ export function usePayWith({
         });
         for (const [key, balance] of read) if (balance > 0n) held.push(key);
         setBalances((prev) => (prev.owner === owner ? { owner, map: new Map([...prev.map, ...read]) } : prev));
-        // The native balance pays for gas, even where it isn't listed (Arc).
-        if (c.native_alias) {
+        // The native balance pays for gas, even where it isn't listed (Arc's USDC, a native coin
+        // Relay only takes through a swap).
+        if (!listsNative(c)) {
           const [gas] = await walletRef.current.readBalances(c, [c.native]).catch(() => [null]);
           if (!cancelled && gas !== null && gas !== undefined) {
             setBalances((prev) => (prev.owner === owner ? { owner, map: new Map(prev.map).set(assetKey(c.id, NATIVE), gas) } : prev));
@@ -236,6 +242,7 @@ export function usePayWith({
       explorer_url: n.explorer,
       rpc_url: n.chain.rpcUrls.default.http[0],
       native: { address: NATIVE, symbol: n.nativeSymbol, name: n.nativeSymbol, decimals: n.chain.nativeCurrency.decimals },
+      native_payable: false,
       tokens: [],
       ...own,
       // Our own marks for our own chains.
