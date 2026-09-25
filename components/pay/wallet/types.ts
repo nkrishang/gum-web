@@ -1,4 +1,6 @@
 import type { Address, Hex } from "viem";
+import type { RouteStage } from "@/lib/pay/routes/execute";
+import type { RouteQuote, SourceChain, SourceToken } from "@/lib/pay/routes/types";
 
 /**
  * Everything the wallet pane needs from a wallet. The live page backs it with wagmi; test mode
@@ -62,4 +64,11 @@ export interface WalletApi {
   /** Switches chain if needed, checks it took, and sends a plain ERC-20 transfer. */
   transfer(request: TransferRequest, onStage?: (stage: "switching" | "signing") => void): Promise<Hex>;
   waitForReceipt(hash: Hex, chainId: number): Promise<"success" | "reverted">;
+  /**
+   * The connected wallet's balance of each token on any chain Relay routes from (the zero address
+   * is the native currency). Null where a read failed.
+   */
+  readBalances(chain: SourceChain, tokens: SourceToken[]): Promise<(bigint | null)[]>;
+  /** Sends a route's origin transactions (see `executeRoute`). Resolves with the last hash. */
+  executeRoute(quote: RouteQuote, chain: SourceChain, onStage?: (stage: RouteStage) => void): Promise<Hex>;
 }

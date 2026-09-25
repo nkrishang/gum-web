@@ -1,5 +1,6 @@
 import { FeedStore, type DepositFeed } from "./feed";
 import { NETWORKS, networkBySlug, type PayNetwork } from "./networks";
+import type { RouteStatus } from "./routes/types";
 import type { PayDeposit, PayEvent, PayEventData, PayTransfer } from "./types";
 
 /**
@@ -13,7 +14,15 @@ import type { PayDeposit, PayEvent, PayEventData, PayTransfer } from "./types";
  * waits for a button.
  */
 
-export type WalletBehavior = "ok" | "reject" | "insufficient" | "no_gas" | "wrong_chain" | "missing_chain" | "revert";
+export type WalletBehavior =
+  | "ok"
+  | "reject"
+  | "insufficient"
+  | "no_gas"
+  | "wrong_chain"
+  | "missing_chain"
+  | "revert"
+  | "route_refund";
 
 export interface SimControls {
   scenario: ScenarioId;
@@ -87,6 +96,8 @@ function toBase(amount: string, decimals: number): bigint {
 
 export const SIM_PAYER = "0x5a0b54d5dc17e0aadc383d2db43b0a0d3e029c4c";
 const EXTERNAL_PAYER = "0x71c7656ec7ab88b098defb751b7401b5f6d8976f";
+/** Relay's solver: a route's fill arrives from it, like any other transfer. */
+export const SIM_SOLVER = "0xf70da97812cb96acdf810712aa562db8dfa3dbef";
 
 export class Simulator extends FeedStore implements DepositFeed {
   readonly setup: SimSetup;
@@ -97,6 +108,8 @@ export class Simulator extends FeedStore implements DepositFeed {
   /** Changes made while "offline", delivered when the connection returns. */
   private pending: PayDeposit | null = null;
   private started = false;
+  /** Routes sent through the simulated Relay, by request id. */
+  private routes = new Map<string, RouteStatus>();
 
   constructor(setup: SimSetup) {
     super(null);
@@ -389,6 +402,34 @@ export class Simulator extends FeedStore implements DepositFeed {
       this.after(delay, () => this.detect(amount, from, undefined, false, { txHash }));
     }
     return txHash;
+  }
+
+  /**
+   * A route's origin transaction went out. The simulated Relay picks it up, fills the payment
+   * address from its solver after `secs`, and reports each step on `routeStatus`; with the
+   * "route_refund" wallet behaviour it refunds instead. Always on its own clock, autopilot or not:
+   * Relay isn't Gum.
+   */
+  routeSent(requestId: string, originHash: string, amount: bigint, secs = 2) {
+    const status: RouteStatus = { request_id: requestId, status: "waiting", in_tx_hashes: [originHash], tx_hashes: [] };
+    this.routes.set(requestId, status);
+    const update = (patch: Partial<RouteStatus>) => this.routes.set(requestId, { ...this.routes.get(requestId)!, ...patch });
+    const fill = Math.max(1_500, secs * 1_000) + jitter(400);
+    this.after(500, () => update({ status: "pending" }));
+    if (this.controls.walletBehavior === "route_refund") {
+      this.after(fill + 1_500, () => update({ status: "refund", fail_reason: "SOLVER_CAPACITY_EXCEEDED" }));
+      return;
+    }
+    const fillHash = hex(32);
+    this.after(fill - 300, () => update({ status: "submitted", tx_hashes: [fillHash] }));
+    this.after(fill, () => {
+      update({ status: "success" });
+      this.detect(amount, SIM_SOLVER, undefined, false, { txHash: fillHash, autoConfirm: true });
+    });
+  }
+
+  routeStatus(requestId: string): RouteStatus {
+    return this.routes.get(requestId) ?? { request_id: requestId, status: "unknown", in_tx_hashes: [], tx_hashes: [] };
   }
 
   sendExternal(fraction: "full" | "part") {
