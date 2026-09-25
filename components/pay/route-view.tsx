@@ -52,7 +52,7 @@ export function RouteView({
   const [error, setError] = React.useState<string | null>(null);
   const selected = payWith.selected!;
   const { status, quote, error: quoteError } = payWith.quote;
-  const busy = stage !== null;
+  const busy = stage !== null || payWith.executing;
 
   const owed = formatUnits(remaining.toString(), deposit.token_decimals);
   const destination = asset.verified ? asset.network.name : `chain ${deposit.chain_id}`;
@@ -62,6 +62,9 @@ export function RouteView({
   const insufficient = spend !== null && selected.balance !== undefined && selected.balance < spend;
   const noGas = !selected.native && native !== undefined && native === 0n;
   const ready = status === "ready" && quote !== undefined;
+  // The quote names the token's decimals, and the route is worth what those decimals say: a
+  // disagreement with the token the payer chose is a route that can't be shown or signed.
+  const mismatch = quote !== undefined && quote !== null && quote.origin.currency.decimals !== selected.token.decimals;
 
   const label = (() => {
     if (stage?.kind === "switching") return `Switching to ${stage.chain}…`;
@@ -80,14 +83,18 @@ export function RouteView({
 
   async function pay() {
     if (busy) return;
+    // Claimed before any await, so a second click can't start a second payment in the gap before
+    // the stage shows.
+    if (!payWith.beginExecution()) return;
     setError(null);
     if (status === "error") {
+      payWith.endExecution();
       await payWith.refreshQuote();
       return;
     }
-    payWith.hold(true);
     try {
       // A quote the payer has been looking at for a while is fetched again: Relay prices it at fill.
+      // The one taken is the one paid: a refresh mid-execution never swaps what's signed.
       let route: RouteQuote | null | undefined = quote;
       const stale = !payWith.quote.at || Date.now() - payWith.quote.at > QUOTE_TTL_MS;
       if (!route || stale || route.destination.amount !== remaining.toString()) route = await payWith.refreshQuote();
@@ -95,7 +102,11 @@ export function RouteView({
       // The fresh quote may ask for more than the balance the button was enabled for.
       const needs = BigInt(route.origin.amount) + (selected.native && route.fees.gas ? BigInt(route.fees.gas.amount) : 0n);
       if (selected.balance !== undefined && selected.balance < needs) {
-        setError(`The price moved: this now needs ${formatBalance(needs, route.origin.currency.decimals)} ${selected.token.symbol}.`);
+        setError(`The price moved: this now needs ${formatBalance(needs, selected.token.decimals)} ${selected.token.symbol}.`);
+        return;
+      }
+      if (route.origin.currency.decimals !== selected.token.decimals) {
+        setError("This route doesn't price the chosen token correctly. Try another.");
         return;
       }
       const hash = await wallet.executeRoute(route, selected.chain, setStage);
@@ -122,7 +133,7 @@ export function RouteView({
       setError(walletErrorMessage(cause));
     } finally {
       setStage(null);
-      payWith.hold(false);
+      payWith.endExecution();
     }
   }
 
@@ -199,16 +210,16 @@ export function RouteView({
       <button
         type="button"
         onClick={pay}
-        disabled={busy || (status !== "error" && (!ready || insufficient || noGas || remaining <= 0n))}
+        disabled={busy || mismatch || (status !== "error" && (!ready || insufficient || noGas || remaining <= 0n))}
         className="mt-auto flex h-12 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-(--pay-button) text-[15px] font-semibold text-(--pay-button-ink) transition-[transform,opacity,background-color] hover:opacity-90 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45"
       >
         {busy || (status === "loading" && !quote) ? <Spinner /> : null}
         {label}
       </button>
 
-      {error || notice ? (
+      {error || notice || mismatch ? (
         <p role="alert" className="px-1 text-center text-[12.5px] leading-snug text-(--pay-danger)">
-          {error ?? notice}
+          {error ?? (mismatch ? "This route doesn't price the chosen token correctly; it can't be paid." : notice)}
         </p>
       ) : insufficient ? (
         <p className="px-1 text-center text-[12.5px] text-(--pay-muted)">

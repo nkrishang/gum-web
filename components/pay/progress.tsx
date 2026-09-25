@@ -215,7 +215,16 @@ export function LifecycleView({
       </div>
 
       <div className="flex min-h-12 flex-col justify-end">
-        {slow && onPayAgain ? (
+        {slow && route && routeStatus?.status === "failure" ? (
+          <p className="text-center text-[12.5px] text-(--pay-warn)">
+            Relay reports a problem filling the route. Waiting to be sure it can&apos;t still land —{" "}
+            <strong className="font-medium text-(--pay-warn)">don&apos;t pay again.</strong>
+          </p>
+        ) : slow && route ? (
+          <p className="text-center text-[12.5px] text-(--pay-warn)">
+            Taking longer than usual. Relay is still on it — <strong className="font-medium text-(--pay-warn)">don&apos;t pay again.</strong>
+          </p>
+        ) : slow && onPayAgain ? (
           <p className="text-center text-[12.5px] text-(--pay-warn)">
             Taking longer than usual. Check your wallet.{" "}
             <button type="button" onClick={onPayAgain} className={INLINE_LINK}>

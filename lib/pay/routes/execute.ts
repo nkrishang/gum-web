@@ -72,13 +72,15 @@ export async function executeRoute(args: {
   return last;
 }
 
-/** An `approve` step whose allowance is already in place. */
+/** An `approve` step whose allowance is already in place. A zero amount is a reset: skipped only
+ * when the allowance is already zero, since a token may require zero before a nonzero approval. */
 async function alreadyApproved(step: RouteStep, owner: Address, chain: SourceChain): Promise<boolean> {
   if (step.id !== "approve" && step.id !== "approval") return false;
   try {
     const { functionName, args } = decodeFunctionData({ abi: erc20Abi, data: step.data as Hex });
     if (functionName !== "approve") return false;
     const [spender, amount] = args as [Address, bigint];
+    if (amount === 0n) return false;
     const allowance = await publicClientFor(chain).readContract({
       address: step.to as Address,
       abi: erc20Abi,

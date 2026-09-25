@@ -129,7 +129,7 @@ export function WalletPane({
   const token = asset.token;
   const shown = formatUnits(remaining.toString(), token.decimals);
   const connected = wallet.status === "connected" && Boolean(wallet.address);
-  const busy = stage !== null;
+  const busy = stage !== null || payWith.executing;
 
   const connectWith = async (option: WalletOption) => {
     const mine = ++attempt.current;

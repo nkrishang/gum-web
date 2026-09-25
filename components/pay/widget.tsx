@@ -10,7 +10,7 @@ import { formatCountdown, payModel, type PayModel } from "@/lib/pay/model";
 import { resolveAsset, type ResolvedAsset } from "@/lib/pay/networks";
 import type { RoutesClient } from "@/lib/pay/routes/client";
 import { simRoutesClient } from "@/lib/pay/routes/sim";
-import { isFinal, type RouteStatus } from "@/lib/pay/routes/types";
+import { type RouteStatus } from "@/lib/pay/routes/types";
 import type { Simulator } from "@/lib/pay/simulator";
 import type { PayDeposit, PayStatus } from "@/lib/pay/types";
 import { cn } from "@/lib/utils";
@@ -147,7 +147,9 @@ const PANE = "h-[400px]";
 
 /**
  * A route this page sent, followed until it lands or Relay gives up on it (`onGiveUp`: refunded or
- * failed).
+ * failed). A `failure` is not given up on: Relay's docs say a fill it reported failed may still
+ * confirm, so the route stays owned — and paid, if the fill lands — until well past any chance of
+ * it. Only a `refund` is settled knowledge that nothing more will arrive.
  */
 function useRouteProgress(
   routes: RoutesClient | null,
@@ -165,15 +167,25 @@ function useRouteProgress(
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     // Relay fills in seconds; a route still unsettled after this is left to the deposit's own feed.
-    const giveUpAt = Date.now() + 15 * 60_000;
+    // A reported failure buys more waiting: only after it can a "pay again" be trusted.
+    let giveUpAt = Date.now() + 15 * 60_000;
     const poll = async (delay: number) => {
       const next = await routes.status(requestId).catch(() => null);
-      if (cancelled || Date.now() > giveUpAt) return;
-      if (next) setStatus(next);
-      if (next && isFinal(next.status)) {
+      if (cancelled) return;
+      if (Date.now() > giveUpAt) {
         const { sent, onGiveUp } = latest.current;
-        if (next.status !== "success" && sent) onGiveUp(next.status === "refund" ? "refund" : "failure", sent);
+        if (sent) onGiveUp("failure", sent);
         return;
+      }
+      if (next) {
+        setStatus(next);
+        if (next.status === "failure") giveUpAt = Math.max(giveUpAt, Date.now() + 5 * 60_000);
+        if (next.status === "refund") {
+          const { sent, onGiveUp } = latest.current;
+          if (sent) onGiveUp("refund", sent);
+          return;
+        }
+        if (next.status === "success") return;
       }
       timer = setTimeout(() => void poll(Math.min(delay * 1.25, 5_000)), delay);
     };

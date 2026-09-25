@@ -56,6 +56,15 @@ export interface PayWith {
   refreshQuote(): Promise<RouteQuote | null>;
   /** Stops refreshing the quote while one is being paid. */
   hold(held: boolean): void;
+  /**
+   * True from the moment a payment starts until its flow ends, however the page rearranges itself
+   * meanwhile: no second payment may start while the first is unresolved.
+   */
+  executing: boolean;
+  /** Claims the one payment slot before the first await. False when a payment is already under way. */
+  beginExecution(): boolean;
+  /** Releases the slot when the flow ends, paid or not. */
+  endExecution(): void;
   /** The wallet's native balance on a chain, for gas. */
   nativeBalance(chainId: number): bigint | undefined;
   /** Tokens beyond the scan: Relay's search, with the wallet's balance of each. */
@@ -287,10 +296,31 @@ export function usePayWith({
     [options],
   );
 
+
   // ---- the quote, for a routed selection ------------------------------------------------------
   const [quote, setQuote] = React.useState<QuoteState & { forKey?: string }>({ status: "idle" });
   const [held, setHeld] = React.useState(false);
   const [nonce, setNonce] = React.useState(0);
+
+  // ---- the one payment --------------------------------------------------------------------------
+  // Claimed synchronously, before the first await of a payment's flow: stage set in state comes too
+  // late, and a second click (or a Change, or a disconnect-and-reconnect) in that window would
+  // start a second payment while the first is still being signed.
+  const executingRef = React.useRef(false);
+  const [executing, setExecuting] = React.useState(false);
+  const beginExecution = React.useCallback(() => {
+    if (executingRef.current) return false;
+    executingRef.current = true;
+    setExecuting(true);
+    setHeld(true);
+    return true;
+  }, []);
+  const endExecution = React.useCallback(() => {
+    executingRef.current = false;
+    setExecuting(false);
+    setHeld(false);
+  }, []);
+
   const quoteKey = isRoute && selected && address && remaining > 0n ? `${selected.key}|${remaining}|${address.toLowerCase()}` : null;
 
   const fetchQuote = React.useCallback(async (): Promise<RouteQuote | null> => {
@@ -374,6 +404,9 @@ export function usePayWith({
     quote: current,
     refreshQuote: fetchQuote,
     hold: setHeld,
+    executing,
+    beginExecution,
+    endExecution,
     nativeBalance: (chainId) =>
       (balances.owner === address?.toLowerCase() ? balances.map.get(assetKey(chainId, NATIVE)) : undefined) ??
       (requested && chainId === requested.chain.id ? wallet.nativeBalance : undefined),
