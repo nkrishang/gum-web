@@ -3,6 +3,7 @@
 import * as React from "react";
 import { ArrowLeftIcon, CheckIcon, XIcon } from "lucide-react";
 import { formatUnits } from "@/lib/format";
+import { parseTime } from "@/lib/pay/time";
 import { formatDuration, formatLatency, type PayModel } from "@/lib/pay/model";
 import { explorerTx, type ResolvedAsset } from "@/lib/pay/networks";
 import { relayTxUrl, type RouteStatus } from "@/lib/pay/routes/types";
@@ -180,15 +181,26 @@ export function LifecycleView({
         : detectedAt !== null && anchor !== null && !failed
           ? since(serverNow)
           : null,
-    links: deposit.tx_hash ? [{ label: "Settlement", href: explorerTx(asset.network, deposit.tx_hash) }] : [],
+    // The settlement transaction exists as soon as Gum submits it, but the checkpoint is done only
+    // when it landed (or failed outright); until then the link would promise a step that hasn't
+    // happened.
+    links:
+      deposit.tx_hash && (settled || failed)
+        ? [{ label: "Settlement", href: explorerTx(asset.network, deposit.tx_hash) }]
+        : [],
   };
 
+  // Relay's own clock, on the same footing as the deposit's event times: on a success that's when
+  // it filled the route, which can be well before Gum detects the deposit. Done without a
+  // timestamp shows no duration rather than an invented one.
+  const routeReportedAt = routeStatus?.status === "success" ? parseTime(routeStatus.updated_at) : null;
   const routeDone = routeStatus?.status === "success" || detectedAt !== null;
+  const routeCompletedAt = routeReportedAt ?? detectedAt;
   const routeCheckpoint: Checkpoint | null = route
     ? {
         label: "Route",
         state: routeDone ? "done" : "active",
-        time: detectedAt !== null ? since(detectedAt) : sentAt !== null ? since(serverNow) : null,
+        time: routeDone ? (routeCompletedAt !== null ? since(routeCompletedAt) : null) : sentAt !== null ? since(serverNow) : null,
         links: [
           { label: "Sent", href: route.explorer ? `${route.explorer}/tx/${sent!.hash}` : null },
           { label: "Relay", href: relayTxUrl(route.requestId) },

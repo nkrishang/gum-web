@@ -413,7 +413,9 @@ export class Simulator extends FeedStore implements DepositFeed {
   routeSent(requestId: string, originHash: string, amount: bigint, secs = 2) {
     const status: RouteStatus = { request_id: requestId, status: "waiting", in_tx_hashes: [originHash], tx_hashes: [] };
     this.routes.set(requestId, status);
-    const update = (patch: Partial<RouteStatus>) => this.routes.set(requestId, { ...this.routes.get(requestId)!, ...patch });
+    // Relay stamps every status change; the page freezes the Route checkpoint's time on this.
+    const update = (patch: Partial<RouteStatus>) =>
+      this.routes.set(requestId, { ...this.routes.get(requestId)!, ...patch, updated_at: new Date().toISOString() });
     const fill = Math.max(1_500, secs * 1_000) + jitter(400);
     this.after(500, () => update({ status: "pending" }));
     if (this.controls.walletBehavior === "route_refund") {
@@ -422,10 +424,10 @@ export class Simulator extends FeedStore implements DepositFeed {
     }
     const fillHash = hex(32);
     this.after(fill - 300, () => update({ status: "submitted", tx_hashes: [fillHash] }));
-    this.after(fill, () => {
-      update({ status: "success" });
-      this.detect(amount, SIM_SOLVER, undefined, false, { txHash: fillHash, autoConfirm: true });
-    });
+    // Relay knows its fill at once; Gum's indexer picks the destination transfer up moments later.
+    // The gap is where the Route checkpoint sits done while Detect is still counting.
+    this.after(fill, () => update({ status: "success" }));
+    this.after(fill + 800, () => this.detect(amount, SIM_SOLVER, undefined, false, { txHash: fillHash, autoConfirm: true }));
   }
 
   routeStatus(requestId: string): RouteStatus {
