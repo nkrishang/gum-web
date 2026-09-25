@@ -377,7 +377,8 @@ function Choice({
       </>
     );
   } else {
-    cost = "—";
+    // Priced a moment after the scan; until then, a placeholder rather than a dash.
+    cost = <span className="inline-block h-3.5 w-12 animate-pulse rounded bg-(--pay-sunk) align-middle" aria-label="pricing" />;
   }
 
   return (

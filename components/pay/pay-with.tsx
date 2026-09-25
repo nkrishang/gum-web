@@ -66,8 +66,20 @@ export function AssetMark({
   );
 }
 
+/** The page's own marks for the stablecoins it knows, where Relay has no logo. */
+const LOCAL_ICONS: Record<string, string> = {
+  USDC: "/payment-icons/usdc.svg",
+  "USDC.E": "/payment-icons/usdc.svg",
+  USDT: "/payment-icons/usdt.svg",
+  USDT0: "/payment-icons/usdt.svg",
+  "USD₮0": "/payment-icons/usdt.svg",
+  GUSDT: "/payment-icons/usdt.svg",
+  AUSD: "/payment-icons/ausd.svg",
+};
+
 export function OptionMark({ option, size }: { option: PayOption; size?: number }) {
-  return <AssetMark logo={option.token.logo_uri} symbol={option.token.symbol} chainIcon={option.chain.icon_url} size={size} />;
+  const logo = option.token.logo_uri ?? LOCAL_ICONS[option.token.symbol.toUpperCase()];
+  return <AssetMark logo={logo} symbol={option.token.symbol} chainIcon={option.chain.icon_url} size={size} />;
 }
 
 /**
