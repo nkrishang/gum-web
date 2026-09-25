@@ -253,9 +253,19 @@ function PayWidgetInner({
     [setSent, clockOffset],
   );
 
+  const sentRef = React.useRef<SentPayment | null>(sent);
+  React.useEffect(() => {
+    sentRef.current = sent;
+  });
+
   const onReceipt = React.useCallback(
     (hash: Hex, result: "success" | "reverted") => {
       if (result !== "reverted") return;
+      // A receipt only speaks for the payment it belongs to. A direct transfer left pending too
+      // long may report a revert after the payer gave up on it and started a newer payment — one
+      // that could be a route still waiting to land. Only the payment that sent this hash yields.
+      const current = sentRef.current;
+      if (!current || current.route !== undefined || current.hash.toLowerCase() !== hash.toLowerCase()) return;
       setSent(null);
       setWalletNotice(`Your transfer ${hash.slice(0, 10)}… failed on-chain. Nothing was paid; only gas was spent.`);
     },
