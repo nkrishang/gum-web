@@ -146,48 +146,38 @@ const FRAME = "h-[460px]";
 const PANE = "h-[400px]";
 
 /**
- * A route this page sent, followed until it lands or Relay gives up on it (`onGiveUp`: refunded or
- * failed). A `failure` is not given up on: Relay's docs say a fill it reported failed may still
- * confirm, so the route stays owned — and paid, if the fill lands — until well past any chance of
- * it. Only a `refund` is settled knowledge that nothing more will arrive.
+ * A route this page sent, followed until it lands or Relay refunds it (`onRefund`). Only a `refund`
+ * is definitive nonpayment — a reported `failure` may still confirm, so nothing clears ownership on
+ * a clock: the route stays owned, and paid if the fill lands, for as long as this page is open.
  */
 function useRouteProgress(
   routes: RoutesClient | null,
   sent: SentPayment | null,
-  onGiveUp: (status: "refund" | "failure", sent: SentPayment) => void,
+  onRefund: (sent: SentPayment) => void,
 ): RouteStatus | null {
   const requestId = sent?.route?.requestId ?? null;
   const [status, setStatus] = React.useState<RouteStatus | null>(null);
-  const latest = React.useRef({ sent, onGiveUp });
+  const latest = React.useRef({ sent, onRefund });
   React.useEffect(() => {
-    latest.current = { sent, onGiveUp };
+    latest.current = { sent, onRefund };
   });
   React.useEffect(() => {
     if (!routes || !requestId) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
-    // Relay fills in seconds; a route still unsettled after this is left to the deposit's own feed.
-    // A reported failure buys more waiting: only after it can a "pay again" be trusted.
-    let giveUpAt = Date.now() + 15 * 60_000;
     const poll = async (delay: number) => {
       const next = await routes.status(requestId).catch(() => null);
       if (cancelled) return;
-      if (Date.now() > giveUpAt) {
-        const { sent, onGiveUp } = latest.current;
-        if (sent) onGiveUp("failure", sent);
-        return;
-      }
       if (next) {
         setStatus(next);
-        if (next.status === "failure") giveUpAt = Math.max(giveUpAt, Date.now() + 5 * 60_000);
+        if (next.status === "success") return; // Landed; the deposit's own feed takes over.
         if (next.status === "refund") {
-          const { sent, onGiveUp } = latest.current;
-          if (sent) onGiveUp("refund", sent);
+          const { sent, onRefund } = latest.current;
+          if (sent) onRefund(sent);
           return;
         }
-        if (next.status === "success") return;
       }
-      timer = setTimeout(() => void poll(Math.min(delay * 1.25, 5_000)), delay);
+      timer = setTimeout(() => void poll(Math.min(delay * 1.25, 10_000)), delay);
     };
     void poll(1_500);
     return () => {
@@ -232,15 +222,14 @@ function PayWidgetInner({
     active: model?.acceptsPayment ?? false,
     quoting: tab === "wallet" && sent === null && (model?.acceptsPayment ?? false),
   });
-  // A route Relay gave up on: its funds go back to the payer, and the page asks for payment again.
-  const routeStatus = useRouteProgress(routes, sent, (outcome, gaveUp) => {
+  // A route Relay refunded: its funds went back to the payer, and the page asks for payment again.
+  // A reported failure is not enough to release the payment — see useRouteProgress.
+  const routeStatus = useRouteProgress(routes, sent, (gaveUp) => {
     if (!gaveUp.route) return;
     const { symbol, chainName } = gaveUp.route;
     setSent(null);
     setWalletNotice(
-      outcome === "refund"
-        ? `Relay couldn't complete the route and refunded your ${symbol} on ${chainName}. Nothing was paid.`
-        : `Relay couldn't complete the route, so nothing was paid. Check your ${symbol} on ${chainName} before trying again.`,
+      `Relay couldn't complete the route and refunded your ${symbol} on ${chainName}. Nothing was paid.`,
     );
   });
 

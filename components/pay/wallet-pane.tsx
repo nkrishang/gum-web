@@ -398,6 +398,9 @@ export function WalletPane({
   async function pay() {
     const amount = remaining;
     if (amount <= 0n || busy) return;
+    // Claim the page-wide payment lock before the first await: during the wallet's simulation and
+    // signing neither Change/Disconnect nor a routed payment may start a second one.
+    if (!payWith.beginExecution()) return;
     setError(null);
     try {
       const hash = await wallet.transfer(
@@ -417,6 +420,7 @@ export function WalletPane({
       else setError(walletErrorMessage(cause));
     } finally {
       setStage(null);
+      payWith.endExecution();
     }
   }
 

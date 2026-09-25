@@ -72,8 +72,8 @@ export async function executeRoute(args: {
   return last;
 }
 
-/** An `approve` step whose allowance is already in place. A zero amount is a reset: skipped only
- * when the allowance is already zero, since a token may require zero before a nonzero approval. */
+/** An `approve` step whose allowance is already in place. A zero amount is a zero-reset, which is
+ * always sent: some tokens require it, and the allowance check can't speak for it. */
 async function alreadyApproved(step: RouteStep, owner: Address, chain: SourceChain): Promise<boolean> {
   if (step.id !== "approve" && step.id !== "approval") return false;
   try {
